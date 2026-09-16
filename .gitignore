@@ -1,0 +1,10 @@
+.DS_Store
+node_modules/
+gateway/.env
+gateway/data/*.json
+gateway/data/*.tmp
+work/
+outputs/
+*.xcuserstate
+ios/*.xcodeproj/
+ios/DerivedData/

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "belly-home": {
+      "command": "node",
+      "args": [
+        "--env-file=/absolute/path/to/gateway/.env",
+        "/absolute/path/to/gateway/src/mcp-create-server.mjs"
+      ]
+    }
+  }
+}

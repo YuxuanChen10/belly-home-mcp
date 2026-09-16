@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.belly.home.mcp-http</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>--env-file=/Users/cc/Documents/Codex/2026-09-15/belly-home-mcp/gateway/.env</string>
+    <string>/Users/cc/Documents/Codex/2026-09-15/belly-home-mcp/gateway/src/mcp-http-server.mjs</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/cc/Library/Application Support/Belly Home Infra/Runtime</string>
+  <key>StandardOutPath</key>
+  <string>/Users/cc/Library/Logs/Belly Home Infra/mcp-http.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/cc/Library/Logs/Belly Home Infra/mcp-http.err.log</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+</dict>
+</plist>

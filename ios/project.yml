@@ -1,0 +1,42 @@
+name: AlarmGateway
+options:
+  bundleIdPrefix: com.cc.alarmgateway
+  deploymentTarget:
+    iOS: "26.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    DEVELOPMENT_TEAM: ""
+targets:
+  AlarmGateway:
+    type: application
+    platform: iOS
+    sources:
+      - path: AlarmGateway
+    info:
+      path: AlarmGateway/Info.plist
+      properties:
+        CFBundleDisplayName: Alarm Gateway
+        UILaunchScreen: {}
+        NSAlarmKitUsageDescription: Alarm Gateway uses system alarms that you explicitly create with GPT.
+        NSLocalNetworkUsageDescription: Alarm Gateway connects to your private gateway on the local network.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.cc.alarmgateway.c4f7a9
+        PRODUCT_NAME: AlarmGateway
+        GENERATE_INFOPLIST_FILE: false
+        TARGETED_DEVICE_FAMILY: "1"
+  AlarmGatewayTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: AlarmGatewayTests
+    dependencies:
+      - target: AlarmGateway
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.cc.alarmgateway.c4f7a9.tests

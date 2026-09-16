@@ -1,0 +1,7 @@
+interface:
+  display_name: "Alarm Gateway"
+  short_description: "Create and manage app-owned iPhone system alarms"
+  default_prompt: "Use $alarm-gateway to set an iPhone alarm for tomorrow morning at 7:30."
+
+policy:
+  allow_implicit_invocation: true

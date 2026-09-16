@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "alarm-gateway": {
+      "command": "node",
+      "args": ["/absolute/path/to/gateway/src/mcp-server.mjs"],
+      "env": {
+        "ALARM_GATEWAY_URL": "http://127.0.0.1:8787",
+        "ALARM_GATEWAY_TOKEN": "replace-me",
+        "ALARM_DEVICE_ID": "replace-after-pairing",
+        "ALARM_TIMEZONE": "Australia/Melbourne"
+      }
+    }
+  }
+}
