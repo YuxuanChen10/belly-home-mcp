@@ -195,31 +195,17 @@ export function createMcpHttpHandler({ createMcpServer, bearerToken = null, logg
       if (sessionId) {
         transport = sessions.get(sessionId)?.transport;
         if (!transport) {
-          if (request.method === "GET") {
-            logLifecycle(logger, "session_missing_get", { requestId, sessionId });
-            response.setHeader("allow", "POST");
-            return json(response, 405, {
-              jsonrpc: "2.0",
-              error: { code: -32000, message: "Method not allowed" },
-              id: null
-            });
-          }
-          if (request.method === "POST") {
-            logLifecycle(logger, "session_missing_post", {
-              requestId,
-              sessionId,
-              hasInitialize: bodyHasInitialize(parsedBody)
-            });
-            transport = await createSessionTransport();
-            transientTransport = true;
-          } else {
-            logLifecycle(logger, "session_missing_delete", { requestId, sessionId });
-            return json(response, 404, {
-              jsonrpc: "2.0",
-              error: { code: -32001, message: "Session not found" },
-              id: null
-            });
-          }
+          logLifecycle(logger, "session_missing", {
+            requestId,
+            method: request.method,
+            sessionId,
+            hasInitialize: bodyHasInitialize(parsedBody)
+          });
+          return json(response, 404, {
+            jsonrpc: "2.0",
+            error: { code: -32001, message: "Session not found" },
+            id: null
+          });
         }
         logLifecycle(logger, "session_reused", { requestId, sessionId });
       } else if (request.method === "POST") {

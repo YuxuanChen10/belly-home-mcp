@@ -14,6 +14,7 @@
     "test": "node --test",
     "e2e:mcp": "node scripts/mcp-e2e.mjs",
     "deploy:mcp": "node scripts/deploy-mcp-update.mjs",
+    "repair:services": "bash scripts/repair-services.sh",
     "launchd:install": "node scripts/install-launchagents.mjs",
     "demo": "node --env-file-if-exists=.env scripts/demo.mjs",
     "pairing-code": "node --env-file-if-exists=.env scripts/pairing-code.mjs"

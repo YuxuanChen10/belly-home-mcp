@@ -199,6 +199,17 @@ test("create-only Streamable HTTP MCP works end to end", async () => {
   const mcpUrl = `${baseUrl}/mcp`;
   const initialGet = await fetch(mcpUrl, { method: "GET" });
   assert.equal(initialGet.status, 405);
+  const staleSession = await fetch(mcpUrl, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+      "mcp-session-id": "session-from-before-restart"
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" })
+  });
+  assert.equal(staleSession.status, 404);
+  assert.equal((await staleSession.json()).error.message, "Session not found");
 
   const transport = new StreamableHTTPClientTransport(new URL(mcpUrl));
   const client = new Client({ name: "create-only-http-test", version: "1.0.0" });
