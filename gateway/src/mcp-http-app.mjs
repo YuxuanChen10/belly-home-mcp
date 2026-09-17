@@ -76,7 +76,7 @@ async function readJsonBody(request) {
   return JSON.parse(text);
 }
 
-export function createMcpHttpServer({ createMcpServer, bearerToken = null, logger = console }) {
+export function createMcpHttpHandler({ createMcpServer, bearerToken = null, logger = console }) {
   const sessions = new Map();
 
   async function closeSession(sessionId) {
@@ -126,7 +126,7 @@ export function createMcpHttpServer({ createMcpServer, bearerToken = null, logge
     return transport;
   }
 
-  const httpServer = createNodeServer(async (request, response) => {
+  const handler = async (request, response) => {
     console.log("REQUEST ARRIVED");
     const requestId = randomUUID();
     const startedAt = Date.now();
@@ -271,13 +271,20 @@ export function createMcpHttpServer({ createMcpServer, bearerToken = null, logge
         });
       }
     }
-  });
+  };
 
-  httpServer.on("close", () => {
+  handler.close = async () => {
     for (const sessionId of sessions.keys()) {
-      void closeSession(sessionId);
+      await closeSession(sessionId);
     }
-  });
+  };
 
+  return handler;
+}
+
+export function createMcpHttpServer(options) {
+  const handler = createMcpHttpHandler(options);
+  const httpServer = createNodeServer(handler);
+  httpServer.on("close", () => void handler.close());
   return httpServer;
 }

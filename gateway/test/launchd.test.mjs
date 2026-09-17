@@ -12,11 +12,11 @@ async function plist(name) {
 }
 
 test("LaunchAgent plists use stable runtime and log directories", async () => {
-  for (const file of ["com.belly.home.gateway.plist", "com.belly.home.mcp-http.plist"]) {
+  for (const file of ["com.belly.home.gateway.plist"]) {
     const text = await plist(file);
     assert.match(text, /<key>RunAtLoad<\/key>\s*<true\/>/);
     assert.match(text, /<key>KeepAlive<\/key>\s*<true\/>/);
-    assert.match(text, /<key>WorkingDirectory<\/key>\s*<string>\/Users\/cc\/Library\/Application Support\/Belly Home Infra\/Runtime<\/string>/);
+    assert.match(text, /<key>WorkingDirectory<\/key>\s*<string>\/Users\/cc\/Library\/Application Support\/Belly Home Infra\/gateway<\/string>/);
     assert.match(text, /<key>StandardOutPath<\/key>\s*<string>\/Users\/cc\/Library\/Logs\/Belly Home Infra\//);
     assert.match(text, /<key>StandardErrorPath<\/key>\s*<string>\/Users\/cc\/Library\/Logs\/Belly Home Infra\//);
     assert.doesNotMatch(text, /<key>WorkingDirectory<\/key>\s*<string>[^<]*(Desktop|Documents|Downloads)/);

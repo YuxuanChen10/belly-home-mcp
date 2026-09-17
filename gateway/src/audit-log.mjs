@@ -23,15 +23,17 @@ export function createDiaryAuditEvent({
   durationMs,
   status,
   date,
-  contentChars = 0
+  contentChars = 0,
+  target
 }) {
   return {
     timestamp: startedAt.toISOString(),
-    category: "diary",
+    category: target ? "document" : "diary",
     tool,
     durationMs,
     status,
     date: date || null,
-    contentChars
+    contentChars,
+    ...(target ? { target } : {})
   };
 }

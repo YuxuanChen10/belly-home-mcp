@@ -1,4 +1,6 @@
-const baseUrl = (process.env.ALARM_GATEWAY_URL || "http://127.0.0.1:8787").replace(/\/$/, "");
+import { getBellyHomeBaseUrl } from "../src/config.mjs";
+
+const baseUrl = getBellyHomeBaseUrl();
 const token = process.env.ALARM_GATEWAY_TOKEN || "dev-admin-token";
 const response = await fetch(`${baseUrl}/v1/pairing/start`, {
   method: "POST",

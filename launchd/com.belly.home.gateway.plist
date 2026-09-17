@@ -7,11 +7,11 @@
   <key>ProgramArguments</key>
   <array>
     <string>/usr/local/bin/node</string>
-    <string>--env-file=/Users/cc/Documents/Codex/2026-09-15/belly-home-mcp/gateway/.env</string>
-    <string>/Users/cc/Documents/Codex/2026-09-15/belly-home-mcp/gateway/src/server.mjs</string>
+    <string>--env-file-if-exists=/Users/cc/Library/Application Support/Belly Home Infra/gateway/.env</string>
+    <string>/Users/cc/Library/Application Support/Belly Home Infra/gateway/src/server.mjs</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>/Users/cc/Library/Application Support/Belly Home Infra/Runtime</string>
+  <string>/Users/cc/Library/Application Support/Belly Home Infra/gateway</string>
   <key>StandardOutPath</key>
   <string>/Users/cc/Library/Logs/Belly Home Infra/gateway.out.log</string>
   <key>StandardErrorPath</key>
@@ -20,5 +20,7 @@
   <true/>
   <key>KeepAlive</key>
   <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
 </dict>
 </plist>

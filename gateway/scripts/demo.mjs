@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { getBellyHomeBaseUrl } from "../src/config.mjs";
 
-const baseUrl = (process.env.ALARM_GATEWAY_URL || "http://127.0.0.1:8787").replace(/\/$/, "");
+const baseUrl = getBellyHomeBaseUrl();
 const adminToken = process.env.ALARM_GATEWAY_TOKEN || "dev-admin-token";
 
 async function request(path, { token = adminToken, ...options } = {}) {

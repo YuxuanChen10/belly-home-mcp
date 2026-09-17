@@ -188,3 +188,29 @@ test("an older acknowledgement cannot overwrite a newer command state", async ()
   assert.equal(alarm.body.alarm.status, "queued");
   assert.equal(alarm.body.alarm.pendingRevision, updated.body.command.revision);
 });
+
+test("an advanced phone cursor cannot hide an unacknowledged command", async () => {
+  const device = await pair();
+  const created = await request("/v1/alarms", {
+    method: "POST",
+    body: JSON.stringify({
+      deviceId: device.deviceId,
+      label: "Cursor recovery",
+      schedule: { kind: "once", fireAt: new Date(Date.now() + 3_600_000).toISOString() },
+      idempotencyKey: "cursor-recovery"
+    })
+  });
+
+  const commands = await request("/v1/device/commands?after=999999", { token: device.deviceToken });
+  assert.equal(commands.status, 200);
+  assert.equal(commands.body.commands.length, 1);
+  assert.equal(commands.body.commands[0].alarmId, created.body.alarm.id);
+
+  await request(`/v1/device/commands/${commands.body.commands[0].id}/ack`, {
+    token: device.deviceToken,
+    method: "POST",
+    body: JSON.stringify({ success: true })
+  });
+  const afterAck = await request("/v1/device/commands?after=0", { token: device.deviceToken });
+  assert.deepEqual(afterAck.body.commands, []);
+});

@@ -7,12 +7,12 @@ This private local project connects natural-language requests to two home module
 
 ## What is included
 
-- `gateway/`: persistent HTTP API and MCP servers. The create-only MCP now exposes alarm creation plus diary tools.
+- `gateway/`: one persistent HTTP service for the Gateway API and MCP. The create-only MCP exposes alarm creation plus document tools.
 - `gateway/src/mcp-create-server.mjs`: least-privilege stdio MCP server exposing one-time alarm creation plus private Markdown diary tools.
-- `gateway/src/mcp-http-server.mjs`: the same alarm and diary MCP tools over Streamable HTTP on loopback.
+- `gateway/src/server.mjs`: the unified Gateway and Streamable HTTP MCP service.
 - `ios/`: SwiftUI iPhone client that pairs with the gateway, synchronizes commands, schedules AlarmKit alarms, and acknowledges results.
 - `skill/alarm-gateway/`: Codex skill that defines safe alarm behavior and the MCP tool contract.
-- `launchd/`: LaunchAgent plist files for keeping Gateway and MCP HTTP online after login.
+- `launchd/`: one LaunchAgent plist for keeping Belly Home online after login.
 - `MCP_SETUP.zh-CN.md`, `RUNBOOK.zh-CN.md`, `SECURITY.zh-CN.md`, `ROADMAP.zh-CN.md`: v0.2 operating documentation.
 
 The gateway distinguishes `queued` from `scheduled`. A request is only `scheduled` after the phone acknowledges that AlarmKit accepted it.
@@ -69,38 +69,36 @@ node --env-file=/absolute/path/to/gateway/.env /absolute/path/to/gateway/src/mcp
 
 It exposes `create_alarm`, `append_diary`, `read_diary`, and `list_diary_entries`. The configured phone ID is never accepted from the MCP caller, and the MCP process uses `ALARM_PLUGIN_TOKEN`, which is accepted only by the create-only Gateway route. Diary writes never accept a path or date from the caller; `append_diary` uses the server's `Australia/Melbourne` local date and time and stores one UTF-8 Markdown file per day.
 
-For Streamable HTTP, run:
+For Streamable HTTP, run the unified service:
 
 ```bash
 cd gateway
-npm run mcp:create:http
+npm start
 ```
 
-Then connect to `http://127.0.0.1:8790/mcp`. See `gateway/mcp-create.example.json`, `gateway/mcp-http.example.json`, and `MCP_SETUP.zh-CN.md` for complete setup and ChatGPT Secure MCP Tunnel instructions.
+Then connect to `http://127.0.0.1:8787/mcp`. The Gateway API, MCP, and tunnel origin all use `BELLY_HOME_PORT`. See `gateway/mcp-create.example.json`, `gateway/mcp-http.example.json`, and `MCP_SETUP.zh-CN.md` for complete setup.
 
 Relevant environment variables:
 
-- `ALARM_GATEWAY_URL`, default `http://127.0.0.1:8787`
+- `BELLY_HOME_PORT`, the single port used by Gateway, MCP, and the tunnel origin; default `8787`
 - `ALARM_PLUGIN_TOKEN`, required by the create-only MCP server
 - `ALARM_DEVICE_ID`, fixed server-side target configured on the Gateway
 - `ALARM_TIMEZONE`, default `Australia/Melbourne`
 - `DIARY_ROOT_DIR`, default `~/Library/Application Support/Belly Home Infra/Diary`
 - `DIARY_LOG_FILE`, default `~/Library/Logs/Belly Home Infra/diary-mcp.log`
-- `ALARM_MCP_HTTP_HOST`, default `127.0.0.1`
-- `ALARM_MCP_HTTP_PORT`, default `8790`
 
 The original five-tool admin MCP remains available at `gateway/src/mcp-server.mjs` for local maintenance, but it is not the configuration intended for AI clients.
 
 ## LaunchAgent configuration
 
-Install the provided Gateway and MCP HTTP LaunchAgent templates with:
+Install the unified Belly Home LaunchAgent template with:
 
 ```bash
 cd gateway
 npm run launchd:install
 ```
 
-The plist files keep their runtime cwd in `~/Library/Application Support/Belly Home Infra/Runtime` and write stdout/stderr to `~/Library/Logs/Belly Home Infra`.
+The plist keeps its runtime cwd in `~/Library/Application Support/Belly Home Infra/gateway` and writes stdout/stderr to `~/Library/Logs/Belly Home Infra`.
 
 ## Production boundary
 

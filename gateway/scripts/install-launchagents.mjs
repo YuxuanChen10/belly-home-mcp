@@ -8,9 +8,9 @@ const gatewayRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const projectRoot = join(gatewayRoot, "..");
 const launchdRoot = join(projectRoot, "launchd");
 const launchAgentsRoot = join(homedir(), "Library", "LaunchAgents");
-const runtimeRoot = join(homedir(), "Library", "Application Support", "Belly Home Infra", "Runtime");
+const runtimeRoot = join(homedir(), "Library", "Application Support", "Belly Home Infra", "gateway");
 const logRoot = join(homedir(), "Library", "Logs", "Belly Home Infra");
-const plists = ["com.belly.home.gateway.plist", "com.belly.home.mcp-http.plist"];
+const plists = ["com.belly.home.gateway.plist"];
 
 await mkdir(launchAgentsRoot, { recursive: true });
 await mkdir(runtimeRoot, { recursive: true });

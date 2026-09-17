@@ -181,9 +181,14 @@ export class GatewayStore {
 
   async commandsForDevice(device, after) {
     device.lastSeenAt = now();
-    const commands = this.state.commands.filter((item) => item.deviceId === device.id && item.revision > after && !item.acknowledgedAt);
+    // An unacknowledged command is authoritative. A client cursor can be ahead
+    // after a restore or migration, and must never strand pending work.
+    const commands = this.state.commands.filter((item) => item.deviceId === device.id && !item.acknowledgedAt);
+    const latestRevision = this.state.commands
+      .filter((item) => item.deviceId === device.id)
+      .reduce((latest, item) => Math.max(latest, item.revision), 0);
     await this.persist();
-    return { commands, latestRevision: this.state.revision };
+    return { commands, latestRevision };
   }
 
   async acknowledge(device, commandId, result) {

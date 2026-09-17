@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { DEFAULT_BELLY_HOME_PORT } from "../src/config.mjs";
 
 const sourceGateway = join(dirname(fileURLToPath(import.meta.url)), "..");
 const oldGateway = join(homedir(), "Library", "Application Support", "AlarmGateway", "gateway");
@@ -72,19 +73,16 @@ async function main() {
 
   const oldEnv = await readEnv(join(oldGateway, ".env"));
   const newEnv = [
-    envLine(oldEnv, "PORT", "8787"),
+    `BELLY_HOME_PORT=${oldEnv.get("BELLY_HOME_PORT") ?? oldEnv.get("PORT") ?? DEFAULT_BELLY_HOME_PORT}`,
     envLine(oldEnv, "HOST", "0.0.0.0"),
     envLine(oldEnv, "ALARM_GATEWAY_TOKEN", "dev-admin-token"),
     envLine(oldEnv, "ALARM_PLUGIN_TOKEN"),
     envLine(oldEnv, "ALARM_PLUGIN_RATE_LIMIT", "6"),
-    "ALARM_GATEWAY_URL=http://127.0.0.1:8787",
     envLine(oldEnv, "ALARM_DEVICE_ID"),
     "ALARM_TIMEZONE=Australia/Melbourne",
+    `BELLY_HOME_ROOT_DIR=${root}`,
     `DIARY_ROOT_DIR=${diaryRoot}`,
     `DIARY_LOG_FILE=${logsRoot}/diary-mcp.log`,
-    "ALARM_MCP_HTTP_HOST=127.0.0.1",
-    "ALARM_MCP_HTTP_PORT=8790",
-    envLine(oldEnv, "ALARM_MCP_BEARER_TOKEN"),
     `ALARM_DATA_FILE=${runtimeRoot}/data/gateway.json`,
     envLine(oldEnv, "APNS_KEY_FILE"),
     envLine(oldEnv, "APNS_KEY_ID"),
@@ -108,15 +106,7 @@ async function main() {
       stderr: "gateway.err.log"
     })
   );
-  await writeFile(
-    join(launchAgentsRoot, "com.belly.home.mcp-http.plist"),
-    plist({
-      label: "com.belly.home.mcp-http",
-      entry: "src/mcp-http-server.mjs",
-      stdout: "mcp-http.out.log",
-      stderr: "mcp-http.err.log"
-    })
-  );
+  await rm(join(launchAgentsRoot, "com.belly.home.mcp-http.plist"), { force: true });
 
   const uid = String(process.getuid?.() ?? "");
   for (const label of [
@@ -127,15 +117,15 @@ async function main() {
   ]) {
     spawnSync("launchctl", ["bootout", `gui/${uid}/${label}`], { stdio: "ignore" });
   }
-  for (const file of ["com.belly.home.gateway.plist", "com.belly.home.mcp-http.plist"]) {
+  for (const file of ["com.belly.home.gateway.plist"]) {
     spawnSync("launchctl", ["bootstrap", `gui/${uid}`, join(launchAgentsRoot, file)], { stdio: "inherit" });
   }
-  for (const label of ["com.belly.home.gateway", "com.belly.home.mcp-http"]) {
+  for (const label of ["com.belly.home.gateway"]) {
     spawnSync("launchctl", ["kickstart", "-k", `gui/${uid}/${label}`], { stdio: "inherit" });
   }
 
   console.log(`Migrated Belly Home Infra runtime to ${runtimeRoot}`);
-  console.log("Cloudflare can keep pointing at http://127.0.0.1:8790/mcp");
+  console.log("Cloudflare should point at the unified Belly Home port and /mcp path.");
 }
 
 main().catch((error) => {

@@ -38,7 +38,7 @@ test("MCP exposes alarm tools and creates through the gateway", async () => {
     cwd: gatewayDirectory,
     env: {
       ...process.env,
-      ALARM_GATEWAY_URL: baseUrl,
+      BELLY_HOME_PORT: String(httpServer.address().port),
       ALARM_GATEWAY_TOKEN: adminToken,
       ALARM_DEVICE_ID: device.deviceId,
       ALARM_TIMEZONE: "Australia/Melbourne"

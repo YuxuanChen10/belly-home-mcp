@@ -3,8 +3,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { GatewayClient } from "./gateway-client.mjs";
+import { getBellyHomeBaseUrl } from "./config.mjs";
 
-const baseUrl = process.env.ALARM_GATEWAY_URL || "http://127.0.0.1:8787";
+const baseUrl = getBellyHomeBaseUrl();
 const token = process.env.ALARM_GATEWAY_TOKEN || "dev-admin-token";
 const deviceId = process.env.ALARM_DEVICE_ID;
 const defaultTimeZone = process.env.ALARM_TIMEZONE || "Australia/Melbourne";

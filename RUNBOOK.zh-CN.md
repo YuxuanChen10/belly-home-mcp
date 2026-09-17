@@ -2,22 +2,21 @@
 
 ## 目录
 
-- Gateway 代码：`/Users/cc/Documents/Codex/2026-09-15/belly-home-mcp/gateway`
+- Gateway 代码：`/Users/cc/Desktop/ideas/belly home/belly-home-mcp/gateway`
 - Diary 默认正文：`~/Library/Application Support/Belly Home Infra/Diary`
 - Diary 默认审计日志：`~/Library/Logs/Belly Home Infra/diary-mcp.log`
-- LaunchAgent 模板：`/Users/cc/Documents/Codex/2026-09-15/belly-home-mcp/launchd`
+- LaunchAgent 模板：`/Users/cc/Desktop/ideas/belly home/belly-home-mcp/launchd`
 
 ## 启动顺序
 
-1. 确认 `.env` 已配置 `ALARM_GATEWAY_TOKEN`、`ALARM_PLUGIN_TOKEN`、`ALARM_DEVICE_ID`。
-2. 启动 Gateway：`npm start`。
-3. 启动 MCP HTTP：`npm run mcp:create:http`。
-4. 运行 `npm run e2e:mcp -- "MCP test" 5` 做本地验收。
+1. 确认 `.env` 已配置 `BELLY_HOME_PORT`、`ALARM_GATEWAY_TOKEN`、`ALARM_PLUGIN_TOKEN`、`ALARM_DEVICE_ID`。
+2. 启动统一服务：`npm start`。
+3. 运行自动化测试；需要时再单独执行 MCP 端到端测试。
 
 ## LaunchAgent 安装
 
 ```bash
-cd /Users/cc/Documents/Codex/2026-09-15/belly-home-mcp/gateway
+cd "/Users/cc/Desktop/ideas/belly home/belly-home-mcp/gateway"
 npm run launchd:install
 ```
 
@@ -25,9 +24,7 @@ npm run launchd:install
 
 ```bash
 launchctl print gui/$(id -u)/com.belly.home.gateway
-launchctl print gui/$(id -u)/com.belly.home.mcp-http
 curl http://127.0.0.1:8787/health
-curl http://127.0.0.1:8790/health
 ```
 
 ## 常见故障
@@ -43,7 +40,7 @@ v0.2 不自动 Git push。若要手动备份 Diary，可以复制整个 Diary �
 
 ## 开发文件与实际运行文件的手动同步
 ```bash
-DEV="/Users/cc/Documents/Codex/2026-09-15/belly-home-mcp/gateway"
+DEV="/Users/cc/Desktop/ideas/belly home/belly-home-mcp/gateway"
 RUN="$HOME/Library/Application Support/Belly Home Infra/gateway"
 
 rsync -a \
@@ -55,14 +52,12 @@ rsync -a \
 cd "$RUN"
 npm ci --omit=dev
 
-launchctl bootout gui/$(id -u)/com.belly.home.mcp-http 2>/dev/null || true
-launchctl bootstrap gui/$(id -u) "$HOME/Library/LaunchAgents/com.belly.home.mcp-http.plist" 2>/dev/null || true
-launchctl kickstart -k gui/$(id -u)/com.belly.home.mcp-http
+launchctl kickstart -k gui/$(id -u)/com.belly.home.gateway
 ```
 
 ## 验收
 ```bash
-curl http://127.0.0.1:8790/health
+curl http://127.0.0.1:8787/health
 ```
 ## 本地测试
 ```bash 
@@ -72,7 +67,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
 const client = new Client({ name: 'check', version: '1.0.0' });
-const transport = new StreamableHTTPClientTransport(new URL('http://127.0.0.1:8790/mcp'));
+const transport = new StreamableHTTPClientTransport(new URL('http://127.0.0.1:8787/mcp'));
 
 await client.connect(transport);
 console.log((await client.listTools()).tools.map(t => t.name).sort());

@@ -2,12 +2,12 @@
 
 ## 当前边界
 
-- MCP 只暴露四个明确工具，不提供任意 filesystem。
+- MCP 只暴露五个明确工具，不提供任意 filesystem。
 - `append_diary` 不接受 path 或 date，写入位置由 server 决定。
 - `read_diary` 和 `list_diary_entries` 的日期参数必须是严格 `YYYY-MM-DD`。
 - Diary 正文不写入运行日志；审计日志只记录 metadata。
 - Alarm MCP 使用 `ALARM_PLUGIN_TOKEN`，不能访问 Gateway 管理接口。
-- HTTP MCP 非 loopback 绑定时要求 `ALARM_MCP_BEARER_TOKEN`。
+- 统一服务可供局域网中的 iPhone 连接，但 `/mcp` 只接受本机回环连接；Cloudflare Tunnel 的本地 origin 应指向 `127.0.0.1`。
 
 ## 不进入 Git 的内容
 

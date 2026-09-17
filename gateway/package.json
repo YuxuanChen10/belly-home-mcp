@@ -10,9 +10,10 @@
     "start": "node --env-file-if-exists=.env src/server.mjs",
     "mcp": "node --env-file-if-exists=.env src/mcp-server.mjs",
     "mcp:create": "node --env-file-if-exists=.env src/mcp-create-server.mjs",
-    "mcp:create:http": "node --env-file-if-exists=.env src/mcp-http-server.mjs",
+    "mcp:create:http": "node --env-file-if-exists=.env src/server.mjs",
     "test": "node --test",
     "e2e:mcp": "node scripts/mcp-e2e.mjs",
+    "deploy:mcp": "node scripts/deploy-mcp-update.mjs",
     "launchd:install": "node scripts/install-launchagents.mjs",
     "demo": "node --env-file-if-exists=.env scripts/demo.mjs",
     "pairing-code": "node --env-file-if-exists=.env scripts/pairing-code.mjs"

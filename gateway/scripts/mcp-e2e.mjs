@@ -1,7 +1,8 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { getBellyHomeBaseUrl } from "../src/config.mjs";
 
-const endpoint = process.env.ALARM_MCP_URL || "http://127.0.0.1:8790/mcp";
+const endpoint = `${getBellyHomeBaseUrl()}/mcp`;
 const label = process.argv[2] || "MCP end-to-end test";
 const minutes = Number.parseInt(process.argv[3] || "5", 10);
 const diaryContent = process.env.DIARY_E2E_CONTENT || "Diary MCP end-to-end test entry.";
@@ -10,19 +11,14 @@ if (!Number.isInteger(minutes) || minutes < 1 || minutes > 60) {
   throw new Error("Minutes must be an integer from 1 to 60");
 }
 
-const headers = process.env.ALARM_MCP_BEARER_TOKEN
-  ? { authorization: `Bearer ${process.env.ALARM_MCP_BEARER_TOKEN}` }
-  : undefined;
-const transport = new StreamableHTTPClientTransport(new URL(endpoint), {
-  requestInit: headers ? { headers } : undefined
-});
+const transport = new StreamableHTTPClientTransport(new URL(endpoint));
 const client = new Client({ name: "alarm-bridge-e2e", version: "1.0.0" });
 
 try {
   await client.connect(transport);
   const tools = await client.listTools();
   const names = tools.tools.map((tool) => tool.name).sort();
-  const expected = ["append_diary", "create_alarm", "list_diary_entries", "read_diary"];
+  const expected = ["append_diary", "append_document", "create_alarm", "list_diary_entries", "read_diary"];
   if (JSON.stringify(names) !== JSON.stringify(expected)) {
     throw new Error(`Expected ${expected.join(", ")}, received: ${names.join(", ")}`);
   }

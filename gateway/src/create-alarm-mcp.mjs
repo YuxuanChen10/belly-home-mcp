@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { createDiaryAuditEvent } from "./audit-log.mjs";
 import { DiaryStore } from "./diary-store.mjs";
+import { DOCUMENT_TARGETS, DocumentStore } from "./document-store.mjs";
 
 const fireAtSchema = z.string().regex(
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})$/,
@@ -36,11 +37,11 @@ function toolResult(value) {
   };
 }
 
-async function writeDiaryAudit({ auditLog, tool, startedAt, status, date, contentChars }) {
+async function writeDiaryAudit({ auditLog, tool, startedAt, status, date, contentChars, target }) {
   if (!auditLog) return;
   const durationMs = Date.now() - startedAt.getTime();
   try {
-    await auditLog.write(createDiaryAuditEvent({ tool, startedAt, durationMs, status, date, contentChars }));
+    await auditLog.write(createDiaryAuditEvent({ tool, startedAt, durationMs, status, date, contentChars, target }));
   } catch (error) {
     console.error("Diary audit log write failed:", error instanceof Error ? error.message : error);
   }
@@ -190,12 +191,73 @@ function registerDiaryTools(server, diary, auditLog) {
   );
 }
 
-export function createAlarmMcpServer({ client, timeZone = "Australia/Melbourne", diary = new DiaryStore({ timeZone }), auditLog = null }) {
+function registerDocumentTools(server, documents, auditLog) {
+  server.registerTool(
+    "append_document",
+    {
+      title: "Append Belly Home document",
+      description:
+        "Append content to a Belly Home document. Choose a logical target; the gateway owns all storage paths and timestamps. Attachment values are references only and never cause file access.",
+      inputSchema: {
+        target: z.enum(DOCUMENT_TARGETS).describe("daily, design, development, or knowledge"),
+        content: z.string().min(1).max(documents.maxContentLength).describe("Markdown content to append verbatim"),
+        attachments: z.array(z.string().trim().min(1).max(500)).max(documents.maxAttachments).default([]).optional()
+      },
+      outputSchema: {
+        status: z.enum(["created", "appended"]),
+        target: z.enum(DOCUMENT_TARGETS),
+        date: z.string(),
+        time: z.string(),
+        attachmentCount: z.number().int(),
+        size: z.number()
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: false
+      }
+    },
+    async ({ target, content, attachments }) => {
+      const startedAt = new Date();
+      try {
+        const { path: _path, ...result } = await documents.append({ target, content, attachments });
+        await writeDiaryAudit({
+          auditLog,
+          tool: "append_document",
+          startedAt,
+          status: result.status,
+          date: result.date,
+          contentChars: content.length,
+          target
+        });
+        return toolResult(result);
+      } catch (error) {
+        await writeDiaryAudit({
+          auditLog,
+          tool: "append_document",
+          startedAt,
+          status: "error",
+          contentChars: typeof content === "string" ? content.length : 0,
+          target
+        });
+        return failure(error);
+      }
+    }
+  );
+}
+
+export function createAlarmMcpServer({
+  client,
+  timeZone = "Australia/Melbourne",
+  diary = new DiaryStore({ timeZone }),
+  documents = new DocumentStore({ timeZone }),
+  auditLog = null
+}) {
   const server = new McpServer(
     { name: "belly-home-mcp", version: "0.2.0" },
     {
       instructions:
-        `This private server can create one-time iPhone alarms and append/read/list a private Markdown diary. For alarms, resolve the user's requested time in ${timeZone}, then pass fireAt with an explicit UTC offset. Do not claim the alarm is on the phone unless the result status is scheduled. For diary writes, use append_diary; do not invent paths or dates.`
+        `This private server can create one-time iPhone alarms and manage private Belly Home Markdown documents. For alarms, resolve the user's requested time in ${timeZone}, then pass fireAt with an explicit UTC offset. Do not claim the alarm is on the phone unless the result status is scheduled. Use append_document for new writes and choose a logical target; never invent or manage storage paths.`
     }
   );
 
@@ -256,6 +318,7 @@ export function createAlarmMcpServer({ client, timeZone = "Australia/Melbourne",
   );
 
   registerDiaryTools(server, diary, auditLog);
+  registerDocumentTools(server, documents, auditLog);
 
   return server;
 }
