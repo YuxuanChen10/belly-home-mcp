@@ -2,7 +2,7 @@
 
 ## 当前边界
 
-- MCP 只暴露五个明确工具，不提供任意 filesystem。
+- MCP 只暴露七个明确工具，不提供任意 filesystem。
 - `append_diary` 不接受 path 或 date，写入位置由 server 决定。
 - `read_diary` 和 `list_diary_entries` 的日期参数必须是严格 `YYYY-MM-DD`。
 - Diary 正文不写入运行日志；审计日志只记录 metadata。

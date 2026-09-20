@@ -69,9 +69,11 @@ function assertMinimalTools(tools) {
   assert.deepEqual(tools.tools.map((tool) => tool.name), [
     "create_alarm",
     "append_diary",
+    "update_diary",
     "read_diary",
     "list_diary_entries",
-    "append_document"
+    "append_document",
+    "read_document"
   ]);
   const alarmTool = tools.tools.find((tool) => tool.name === "create_alarm");
   assert.deepEqual(Object.keys(alarmTool.inputSchema.properties).sort(), ["fireAt", "label"]);
@@ -79,11 +81,20 @@ function assertMinimalTools(tools) {
   assert.equal(alarmTool.annotations.destructiveHint, false);
   assert.equal(alarmTool.annotations.openWorldHint, false);
   const diaryTool = tools.tools.find((tool) => tool.name === "append_diary");
-  assert.deepEqual(Object.keys(diaryTool.inputSchema.properties).sort(), ["content", "title"]);
+  assert.deepEqual(Object.keys(diaryTool.inputSchema.properties).sort(), ["content", "tags", "title"]);
   assert.equal(diaryTool.annotations.openWorldHint, false);
+  const updateTool = tools.tools.find((tool) => tool.name === "update_diary");
+  assert.deepEqual(Object.keys(updateTool.inputSchema.properties).sort(), ["id", "patch"]);
+  assert.equal(updateTool.annotations.destructiveHint, false);
   const documentTool = tools.tools.find((tool) => tool.name === "append_document");
   assert.deepEqual(Object.keys(documentTool.inputSchema.properties).sort(), ["attachments", "content", "target"]);
-  assert.deepEqual(documentTool.inputSchema.properties.target.enum, ["daily", "design", "development", "knowledge"]);
+  assert.deepEqual(documentTool.inputSchema.properties.target.enum, ["design", "development", "knowledge"]);
+  const readDocumentTool = tools.tools.find((tool) => tool.name === "read_document");
+  assert.deepEqual(Object.keys(readDocumentTool.inputSchema.properties).sort(), ["limit", "offset", "target"]);
+  assert.deepEqual(readDocumentTool.inputSchema.properties.target.enum, ["design", "development", "knowledge"]);
+  assert.equal(readDocumentTool.annotations.readOnlyHint, true);
+  assert.equal(readDocumentTool.annotations.destructiveHint, false);
+  assert.equal(readDocumentTool.annotations.openWorldHint, false);
 }
 
 async function callCreate(client, label) {
@@ -127,11 +138,25 @@ test("create-only stdio MCP exposes alarm and diary tools", async () => {
       name: "append_diary",
       arguments: {
         title: "MCP test",
-        content: "hello diary"
+        content: "hello diary",
+        tags: ["test"]
       }
     });
     assert.equal(append.isError, undefined);
     assert.match(append.structuredContent.date, /^\d{4}-\d{2}-\d{2}$/);
+    assert.match(append.structuredContent.id, /^[0-9a-f-]{36}$/);
+
+    const update = await client.callTool({
+      name: "update_diary",
+      arguments: {
+        id: append.structuredContent.id,
+        patch: { title: "Updated MCP test", tags: ["test", "updated"] }
+      }
+    });
+    assert.equal(update.isError, undefined);
+    assert.equal(update.structuredContent.message, "Diary Updated");
+    assert.equal(update.structuredContent.id, append.structuredContent.id);
+    assert.equal(update.structuredContent.version, 2);
 
     const read = await client.callTool({
       name: "read_diary",
@@ -162,12 +187,33 @@ test("create-only stdio MCP exposes alarm and diary tools", async () => {
       /document API test/
     );
 
+    const readDocument = await client.callTool({
+      name: "read_document",
+      arguments: { target: "design", offset: 0, limit: 30 }
+    });
+    assert.equal(readDocument.isError, undefined);
+    assert.equal(readDocument.structuredContent.status, "found");
+    assert.equal(readDocument.structuredContent.target, "design");
+    assert.equal(readDocument.structuredContent.hasMore, true);
+    assert.match(readDocument.structuredContent.content, /^# Design Diary/);
+
     const logText = await readFile(diaryLogFile, "utf8");
     assert.equal(logText.includes("hello diary"), false);
     const events = logText.trim().split("\n").map((line) => JSON.parse(line));
-    assert.deepEqual(events.map((event) => event.tool), ["append_diary", "read_diary", "list_diary_entries", "append_document"]);
+    assert.deepEqual(events.map((event) => event.tool), [
+      "append_diary",
+      "update_diary",
+      "read_diary",
+      "list_diary_entries",
+      "append_document",
+      "read_document"
+    ]);
     assert.equal(events[0].contentChars, "hello diary".length);
-    assert.equal(events[3].target, "design");
+    assert.equal(events[1].operation, "UPDATE");
+    assert.equal(events[1].diaryId, append.structuredContent.id);
+    assert.deepEqual(events[1].updatedFields, ["title", "tags"]);
+    assert.equal(events[4].target, "design");
+    assert.equal(events[5].target, "design");
   } finally {
     await client.close();
     await new Promise((resolve) => gateway.close(resolve));

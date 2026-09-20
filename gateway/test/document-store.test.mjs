@@ -14,7 +14,6 @@ test("append maps every logical target to its fixed Belly Home path", async () =
   });
 
   const targets = [
-    ["daily", "Diary/2026-09-17.md"],
     ["design", "Design/Design Diary.md"],
     ["development", "Development/Development Log.md"],
     ["knowledge", "Knowledge/Lessons Learned.md"]
@@ -56,9 +55,54 @@ test("append validates content and attachment references", async () => {
   const rootDirectory = await mkdtemp(join(tmpdir(), "document-store-"));
   const documents = new DocumentStore({ rootDirectory, maxContentLength: 5, maxAttachments: 1 });
 
-  await assert.rejects(() => documents.append({ target: "daily", content: "123456" }), /exceeds 5/);
+  await assert.rejects(() => documents.append({ target: "design", content: "123456" }), /exceeds 5/);
   await assert.rejects(
-    () => documents.append({ target: "daily", content: "ok", attachments: ["one", "two"] }),
+    () => documents.append({ target: "design", content: "ok", attachments: ["one", "two"] }),
     /exceeds 1 items/
   );
+});
+
+test("read returns full documents and supports Unicode character pagination", async () => {
+  const rootDirectory = await mkdtemp(join(tmpdir(), "document-store-"));
+  const documents = new DocumentStore({ rootDirectory, maxReadLength: 20 });
+  await documents.append({ target: "development", content: "A😀BCDE" });
+
+  const full = await documents.read({ target: "development" });
+  assert.equal(full.status, "found");
+  assert.match(full.content, /A😀BCDE/);
+  assert.equal(full.characterCount, Array.from(full.content).length);
+  assert.equal(full.returnedCharacters, full.characterCount);
+  assert.equal(full.hasMore, false);
+  assert.match(full.updatedAt, /^\d{4}-\d{2}-\d{2}T/);
+
+  const emojiOffset = Array.from(full.content).indexOf("😀");
+  const page = await documents.read({ target: "development", offset: emojiOffset, limit: 3 });
+  assert.equal(page.content, "😀BC");
+  assert.equal(page.returnedCharacters, 3);
+  assert.equal(page.characterCount, full.characterCount);
+  assert.equal(page.hasMore, true);
+});
+
+test("read maps only document targets and rejects the diary domain", async () => {
+  const rootDirectory = await mkdtemp(join(tmpdir(), "document-store-"));
+  const documents = new DocumentStore({ rootDirectory });
+
+  for (const target of ["design", "development", "knowledge"]) {
+    const missing = await documents.read({ target });
+    assert.equal(missing.status, "not_found");
+    assert.equal(missing.content, "");
+      assert.equal(missing.hasMore, false);
+  }
+
+  await assert.rejects(() => documents.append({ target: "daily", content: "private" }), /target must be one of/);
+  await assert.rejects(() => documents.read({ target: "daily" }), /target must be one of/);
+});
+
+test("read rejects arbitrary targets and invalid pagination", async () => {
+  const rootDirectory = await mkdtemp(join(tmpdir(), "document-store-"));
+  const documents = new DocumentStore({ rootDirectory, maxReadLength: 10 });
+
+  await assert.rejects(() => documents.read({ target: "../../secret" }), /target must be one of/);
+  await assert.rejects(() => documents.read({ target: "design", offset: -1 }), /non-negative integer/);
+  await assert.rejects(() => documents.read({ target: "design", limit: 11 }), /from 1 to 10/);
 });

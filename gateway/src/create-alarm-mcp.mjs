@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { createDiaryAuditEvent } from "./audit-log.mjs";
-import { DiaryStore } from "./diary-store.mjs";
+import { createContentAuditEvent } from "./audit-log.mjs";
+import { DiaryNotFoundError, DiaryStore } from "./diary-store.mjs";
 import { DOCUMENT_TARGETS, DocumentStore } from "./document-store.mjs";
 
 const fireAtSchema = z.string().regex(
@@ -37,13 +37,35 @@ function toolResult(value) {
   };
 }
 
-async function writeDiaryAudit({ auditLog, tool, startedAt, status, date, contentChars, target }) {
+async function writeContentAudit({
+  auditLog,
+  tool,
+  startedAt,
+  status,
+  date,
+  contentChars,
+  target,
+  operation,
+  diaryId,
+  updatedFields
+}) {
   if (!auditLog) return;
   const durationMs = Date.now() - startedAt.getTime();
   try {
-    await auditLog.write(createDiaryAuditEvent({ tool, startedAt, durationMs, status, date, contentChars, target }));
+    await auditLog.write(createContentAuditEvent({
+      tool,
+      startedAt,
+      durationMs,
+      status,
+      date,
+      contentChars,
+      target,
+      operation,
+      diaryId,
+      updatedFields
+    }));
   } catch (error) {
-    console.error("Diary audit log write failed:", error instanceof Error ? error.message : error);
+    console.error("Content audit log write failed:", error instanceof Error ? error.message : error);
   }
 }
 
@@ -56,13 +78,19 @@ function registerDiaryTools(server, diary, auditLog) {
         "Append Markdown content to today's private diary file. The server chooses the Australia/Melbourne date and time; callers cannot provide a path or date.",
       inputSchema: {
         content: z.string().min(1).max(diary.maxContentLength).describe("Markdown diary content to append verbatim"),
-        title: z.string().trim().min(1).max(80).optional().describe("Optional entry title")
+        title: z.string().trim().min(1).max(80).optional().describe("Optional entry title"),
+        tags: z.array(z.string().trim().min(1).max(40)).max(diary.maxTags).default([]).optional()
       },
       outputSchema: {
         status: z.enum(["created", "appended"]),
+        id: z.string().uuid(),
         date: z.string(),
         time: z.string(),
         title: z.string().optional(),
+        tags: z.array(z.string()),
+        createdAt: z.string(),
+        updatedAt: z.string(),
+        version: z.number().int(),
         size: z.number()
       },
       annotations: {
@@ -71,11 +99,11 @@ function registerDiaryTools(server, diary, auditLog) {
         openWorldHint: false
       }
     },
-    async ({ content, title }) => {
+    async ({ content, title, tags }) => {
       const startedAt = new Date();
       try {
-        const { path: _path, ...result } = await diary.append({ content, title });
-        await writeDiaryAudit({
+        const { path: _path, ...result } = await diary.append({ content, title, tags });
+        await writeContentAudit({
           auditLog,
           tool: "append_diary",
           startedAt,
@@ -85,12 +113,77 @@ function registerDiaryTools(server, diary, auditLog) {
         });
         return toolResult(result);
       } catch (error) {
-        await writeDiaryAudit({
+        await writeContentAudit({
           auditLog,
           tool: "append_diary",
           startedAt,
           status: "error",
           contentChars: typeof content === "string" ? content.length : 0
+        });
+        return failure(error);
+      }
+    }
+  );
+
+  server.registerTool(
+    "update_diary",
+    {
+      title: "Update diary entry",
+      description:
+        "Partially update one diary entry by its stable ID. Only supplied title, content, or tags are changed. The entry ID and createdAt remain unchanged, and the previous version is preserved.",
+      inputSchema: {
+        id: z.string().uuid(),
+        patch: z.object({
+          title: z.string().trim().max(80).optional(),
+          content: z.string().min(1).max(diary.maxContentLength).optional(),
+          tags: z.array(z.string().trim().min(1).max(40)).max(diary.maxTags).optional()
+        }).refine((patch) => Object.keys(patch).length > 0, "patch must include title, content, or tags")
+      },
+      outputSchema: {
+        status: z.literal("updated"),
+        message: z.literal("Diary Updated"),
+        id: z.string().uuid(),
+        date: z.string(),
+        title: z.string().optional(),
+        tags: z.array(z.string()),
+        createdAt: z.string(),
+        updatedAt: z.string(),
+        version: z.number().int(),
+        updatedFields: z.array(z.enum(["title", "content", "tags"])),
+        size: z.number()
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: false
+      }
+    },
+    async ({ id, patch }) => {
+      const startedAt = new Date();
+      try {
+        const { path: _path, ...result } = await diary.update(id, patch);
+        await writeContentAudit({
+          auditLog,
+          tool: "update_diary",
+          startedAt,
+          status: result.status,
+          date: result.date,
+          contentChars: typeof patch.content === "string" ? patch.content.length : 0,
+          operation: "UPDATE",
+          diaryId: id,
+          updatedFields: result.updatedFields
+        });
+        return toolResult(result);
+      } catch (error) {
+        await writeContentAudit({
+          auditLog,
+          tool: "update_diary",
+          startedAt,
+          status: error instanceof DiaryNotFoundError ? "not_found" : "error",
+          contentChars: typeof patch?.content === "string" ? patch.content.length : 0,
+          operation: "UPDATE",
+          diaryId: id,
+          updatedFields: patch && typeof patch === "object" ? Object.keys(patch) : []
         });
         return failure(error);
       }
@@ -109,6 +202,16 @@ function registerDiaryTools(server, diary, auditLog) {
         status: z.enum(["found", "not_found"]),
         date: z.string(),
         content: z.string().optional(),
+        entries: z.array(z.object({
+          id: z.string().uuid(),
+          date: z.string(),
+          time: z.string(),
+          title: z.string().optional(),
+          tags: z.array(z.string()),
+          createdAt: z.string(),
+          updatedAt: z.string(),
+          version: z.number().int()
+        })).optional(),
         size: z.number().optional(),
         updatedAt: z.string().optional()
       },
@@ -122,7 +225,7 @@ function registerDiaryTools(server, diary, auditLog) {
       const startedAt = new Date();
       try {
         const result = await diary.read({ date });
-        await writeDiaryAudit({
+        await writeContentAudit({
           auditLog,
           tool: "read_diary",
           startedAt,
@@ -131,7 +234,7 @@ function registerDiaryTools(server, diary, auditLog) {
         });
         return toolResult(result);
       } catch (error) {
-        await writeDiaryAudit({
+        await writeContentAudit({
           auditLog,
           tool: "read_diary",
           startedAt,
@@ -169,7 +272,7 @@ function registerDiaryTools(server, diary, auditLog) {
       const startedAt = new Date();
       try {
         const result = await diary.list({ limit, before });
-        await writeDiaryAudit({
+        await writeContentAudit({
           auditLog,
           tool: "list_diary_entries",
           startedAt,
@@ -178,7 +281,7 @@ function registerDiaryTools(server, diary, auditLog) {
         });
         return toolResult(result);
       } catch (error) {
-        await writeDiaryAudit({
+        await writeContentAudit({
           auditLog,
           tool: "list_diary_entries",
           startedAt,
@@ -199,7 +302,7 @@ function registerDocumentTools(server, documents, auditLog) {
       description:
         "Append content to a Belly Home document. Choose a logical target; the gateway owns all storage paths and timestamps. Attachment values are references only and never cause file access.",
       inputSchema: {
-        target: z.enum(DOCUMENT_TARGETS).describe("daily, design, development, or knowledge"),
+        target: z.enum(DOCUMENT_TARGETS).describe("design, development, or knowledge"),
         content: z.string().min(1).max(documents.maxContentLength).describe("Markdown content to append verbatim"),
         attachments: z.array(z.string().trim().min(1).max(500)).max(documents.maxAttachments).default([]).optional()
       },
@@ -221,7 +324,7 @@ function registerDocumentTools(server, documents, auditLog) {
       const startedAt = new Date();
       try {
         const { path: _path, ...result } = await documents.append({ target, content, attachments });
-        await writeDiaryAudit({
+        await writeContentAudit({
           auditLog,
           tool: "append_document",
           startedAt,
@@ -232,12 +335,65 @@ function registerDocumentTools(server, documents, auditLog) {
         });
         return toolResult(result);
       } catch (error) {
-        await writeDiaryAudit({
+        await writeContentAudit({
           auditLog,
           tool: "append_document",
           startedAt,
           status: "error",
           contentChars: typeof content === "string" ? content.length : 0,
+          target
+        });
+        return failure(error);
+      }
+    }
+  );
+
+  server.registerTool(
+    "read_document",
+    {
+      title: "Read Belly Home document",
+      description:
+        "Read a shareable Belly Home knowledge document by logical target. Use offset and limit for character-based pagination; omit limit to read through the end. Diary is a separate private domain and must be accessed with read_diary. Callers cannot provide a file path.",
+      inputSchema: {
+        target: z.enum(DOCUMENT_TARGETS).describe("design, development, or knowledge"),
+        offset: z.number().int().min(0).default(0).optional().describe("Zero-based Unicode character offset"),
+        limit: z.number().int().min(1).max(documents.maxReadLength).optional().describe("Maximum Unicode characters to return")
+      },
+      outputSchema: {
+        status: z.enum(["found", "not_found"]),
+        target: z.enum(DOCUMENT_TARGETS),
+        content: z.string(),
+        offset: z.number().int(),
+        limit: z.number().int().optional(),
+        returnedCharacters: z.number().int(),
+        characterCount: z.number().int(),
+        hasMore: z.boolean(),
+        updatedAt: z.string().optional()
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: false
+      }
+    },
+    async ({ target, offset, limit }) => {
+      const startedAt = new Date();
+      try {
+        const { path: _path, ...result } = await documents.read({ target, offset, limit });
+        await writeContentAudit({
+          auditLog,
+          tool: "read_document",
+          startedAt,
+          status: result.status,
+          target
+        });
+        return toolResult(result);
+      } catch (error) {
+        await writeContentAudit({
+          auditLog,
+          tool: "read_document",
+          startedAt,
+          status: "error",
           target
         });
         return failure(error);
@@ -257,7 +413,7 @@ export function createAlarmMcpServer({
     { name: "belly-home-mcp", version: "0.2.0" },
     {
       instructions:
-        `This private server can create one-time iPhone alarms and manage private Belly Home Markdown documents. For alarms, resolve the user's requested time in ${timeZone}, then pass fireAt with an explicit UTC offset. Do not claim the alarm is on the phone unless the result status is scheduled. Use append_document for new writes and choose a logical target; never invent or manage storage paths.`
+        `This private server can create one-time iPhone alarms and manage Belly Home Markdown data. For alarms, resolve the user's requested time in ${timeZone}, then pass fireAt with an explicit UTC offset. Do not claim the alarm is on the phone unless the result status is scheduled. Diary is a private life domain and must use the diary tools. Documents are the shareable design, development, and knowledge domains and must use append_document or read_document. Never cross these domains or invent storage paths.`
     }
   );
 

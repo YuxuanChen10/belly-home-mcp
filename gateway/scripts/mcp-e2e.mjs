@@ -18,7 +18,7 @@ try {
   await client.connect(transport);
   const tools = await client.listTools();
   const names = tools.tools.map((tool) => tool.name).sort();
-  const expected = ["append_diary", "append_document", "create_alarm", "list_diary_entries", "read_diary"];
+  const expected = ["append_diary", "append_document", "create_alarm", "list_diary_entries", "read_diary", "read_document", "update_diary"];
   if (JSON.stringify(names) !== JSON.stringify(expected)) {
     throw new Error(`Expected ${expected.join(", ")}, received: ${names.join(", ")}`);
   }
@@ -41,6 +41,18 @@ try {
   });
   if (appendResult.isError) throw new Error(appendResult.content?.[0]?.text || "append_diary failed");
 
+  const updateResult = await client.callTool({
+    name: "update_diary",
+    arguments: {
+      id: appendResult.structuredContent.id,
+      patch: { tags: ["e2e"] }
+    }
+  });
+  if (updateResult.isError) throw new Error(updateResult.content?.[0]?.text || "update_diary failed");
+  if (updateResult.structuredContent.version !== 2) {
+    throw new Error("update_diary did not create version 2");
+  }
+
   const readResult = await client.callTool({
     name: "read_diary",
     arguments: { date: appendResult.structuredContent.date }
@@ -59,12 +71,27 @@ try {
     throw new Error("list_diary_entries did not include the appended diary date");
   }
 
+  const documentResult = await client.callTool({
+    name: "read_document",
+    arguments: { target: "development", limit: 1000 }
+  });
+  if (documentResult.isError) throw new Error(documentResult.content?.[0]?.text || "read_document failed");
+  if (!["found", "not_found"].includes(documentResult.structuredContent.status)) {
+    throw new Error("read_document returned an invalid status");
+  }
+
   console.log(JSON.stringify({
     alarm: alarmResult.structuredContent,
     diary: {
       append: appendResult.structuredContent,
+      update: updateResult.structuredContent,
       read: { status: readResult.structuredContent.status, date: readResult.structuredContent.date },
-      list: listResult.structuredContent
+      list: listResult.structuredContent,
+      document: {
+        status: documentResult.structuredContent.status,
+        target: documentResult.structuredContent.target,
+        hasMore: documentResult.structuredContent.hasMore
+      }
     }
   }, null, 2));
 } finally {

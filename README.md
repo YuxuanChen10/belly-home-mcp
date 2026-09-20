@@ -67,7 +67,7 @@ For the final least-privilege integration, start the gateway first and register 
 node --env-file=/absolute/path/to/gateway/.env /absolute/path/to/gateway/src/mcp-create-server.mjs
 ```
 
-It exposes `create_alarm`, `append_diary`, `read_diary`, and `list_diary_entries`. The configured phone ID is never accepted from the MCP caller, and the MCP process uses `ALARM_PLUGIN_TOKEN`, which is accepted only by the create-only Gateway route. Diary writes never accept a path or date from the caller; `append_diary` uses the server's `Australia/Melbourne` local date and time and stores one UTF-8 Markdown file per day.
+It exposes `create_alarm`, `append_diary`, `update_diary`, `read_diary`, `list_diary_entries`, `append_document`, and `read_document`. The configured phone ID is never accepted from the MCP caller, and the MCP process uses `ALARM_PLUGIN_TOKEN`, which is accepted only by the create-only Gateway route. Diary is the private life domain: its tools use the server's `Australia/Melbourne` date, maintain stable entry IDs, and preserve update history. Document is the shareable knowledge domain: `append_document` and `read_document` accept only `design`, `development`, or `knowledge`, support Unicode character pagination for reads, and never accept a file path. Diary is never exposed through a Document target.
 
 For Streamable HTTP, run the unified service:
 

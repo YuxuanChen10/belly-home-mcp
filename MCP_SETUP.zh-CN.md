@@ -1,12 +1,14 @@
 # Belly Home MCP v0.2 运行与连接
 
-这个版本使用一个进程和一个 `BELLY_HOME_PORT` 同时提供 Gateway API 与 MCP。MCP 暴露五个工具：
+这个版本使用一个进程和一个 `BELLY_HOME_PORT` 同时提供 Gateway API 与 MCP。MCP 暴露七个工具：
 
 - `create_alarm`
 - `append_diary`
+- `update_diary`
 - `read_diary`
 - `list_diary_entries`
 - `append_document`
+- `read_document`
 
 ## 权限边界
 
@@ -14,6 +16,8 @@
 - Diary 写入不接受 path 或 date；`append_diary` 由 server 按 `Australia/Melbourne` 生成当天文件和当前 `HH:mm`。
 - Diary 文件是 UTF-8 Markdown，一天一个 `YYYY-MM-DD.md`，默认保存在 `~/Library/Application Support/Belly Home Infra/Diary`。
 - Diary 调用日志默认写入 `~/Library/Logs/Belly Home Infra/diary-mcp.log`，只记录 tool、耗时、状态、日期和字符数，不记录正文、token 或 `.env`。
+- Diary 是私人的人生记录，只能通过 `append_diary`、`read_diary`、`update_diary`、`list_diary_entries` 访问。
+- Document 是可分享的知识记录；`append_document` 和 `read_document` 只接受 `design`、`development`、`knowledge`，其中读取的 `offset` 和 `limit` 按 Unicode 字符分页。Document 不接受 `daily` 或文件路径。
 - Cloudflare Tunnel 只发布统一端口上的 `/mcp` 路径。
 
 ## 首次设置
@@ -75,7 +79,7 @@ cd "/Users/cc/Desktop/ideas/belly home/belly-home-mcp/gateway"
 npm run e2e:mcp -- "MCP test" 5
 ```
 
-脚本会确认 MCP 暴露五个工具，并检查 alarm、diary 和 document 调用链。
+脚本会确认 MCP 暴露七个工具，并检查 alarm、diary update 和 document read 调用链。
 
 ## 连接 ChatGPT
 
@@ -88,4 +92,4 @@ tunnel-client doctor --profile belly-home --explain
 tunnel-client run --profile belly-home
 ```
 
-在 ChatGPT Developer mode 中刷新现有 Plugin。扫描工具时应看到 `create_alarm`、`append_diary`、`read_diary`、`list_diary_entries`、`append_document`。
+在 ChatGPT Developer mode 中刷新现有 Plugin。扫描工具时应看到 `create_alarm`、`append_diary`、`update_diary`、`read_diary`、`list_diary_entries`、`append_document`、`read_document`。

@@ -1,5 +1,5 @@
 import { constants as fsConstants } from "node:fs";
-import { access, mkdir, open, stat } from "node:fs/promises";
+import { access, mkdir, open, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -9,7 +9,7 @@ const TARGETS = Object.freeze({
   knowledge: { directory: "Knowledge", file: "Lessons Learned.md", title: "Lessons Learned" }
 });
 
-export const DOCUMENT_TARGETS = Object.freeze(["daily", ...Object.keys(TARGETS)]);
+export const DOCUMENT_TARGETS = Object.freeze(Object.keys(TARGETS));
 
 function defaultRootDirectory() {
   return join(homedir(), "Library", "Application Support", "Belly Home Infra");
@@ -73,23 +73,34 @@ function attachmentBlock(attachments) {
   return `\n\n### Attachments\n\n${attachments.map((item) => `- ${item}`).join("\n")}`;
 }
 
+function normalizePage(offset, limit, maxReadLength) {
+  if (!Number.isInteger(offset) || offset < 0) {
+    throw new Error("offset must be a non-negative integer");
+  }
+  if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > maxReadLength)) {
+    throw new Error(`limit must be an integer from 1 to ${maxReadLength}`);
+  }
+  return { offset, limit };
+}
+
 export class DocumentStore {
   constructor({
     rootDirectory = defaultRootDirectory(),
     timeZone = "Australia/Melbourne",
     now = () => new Date(),
     maxContentLength = 100_000,
-    maxAttachments = 20
+    maxAttachments = 20,
+    maxReadLength = 100_000
   } = {}) {
     this.rootDirectory = rootDirectory;
     this.timeZone = timeZone;
     this.now = now;
     this.maxContentLength = maxContentLength;
     this.maxAttachments = maxAttachments;
+    this.maxReadLength = maxReadLength;
   }
 
-  targetPath(target, date) {
-    if (target === "daily") return join(this.rootDirectory, "Diary", `${date}.md`);
+  targetPath(target) {
     const definition = TARGETS[target];
     if (!definition) throw new Error(`target must be one of: ${DOCUMENT_TARGETS.join(", ")}`);
     return join(this.rootDirectory, definition.directory, definition.file);
@@ -102,11 +113,11 @@ export class DocumentStore {
     const normalizedContent = normalizeContent(content, this.maxContentLength);
     const normalizedAttachments = normalizeAttachments(attachments, this.maxAttachments);
     const { date, time } = localParts(this.now(), this.timeZone);
-    const filePath = this.targetPath(target, date);
+    const filePath = this.targetPath(target);
     await mkdir(dirname(filePath), { recursive: true });
 
     const exists = await pathExists(filePath);
-    const documentTitle = target === "daily" ? `${date} · 翎翎日记` : TARGETS[target].title;
+    const documentTitle = TARGETS[target].title;
     const prefix = exists ? "\n" : `# ${documentTitle}\n> ${this.timeZone}\n\n`;
     const entry = `${prefix}## ${date} ${time}\n\n${normalizedContent}${attachmentBlock(normalizedAttachments)}\n`;
 
@@ -127,6 +138,49 @@ export class DocumentStore {
       attachmentCount: normalizedAttachments.length,
       path: filePath,
       size: file.size
+    };
+  }
+
+  async read({ target, offset = 0, limit } = {}) {
+    if (!DOCUMENT_TARGETS.includes(target)) {
+      throw new Error(`target must be one of: ${DOCUMENT_TARGETS.join(", ")}`);
+    }
+    const page = normalizePage(offset, limit, this.maxReadLength);
+    const filePath = this.targetPath(target);
+
+    if (!(await pathExists(filePath))) {
+      return {
+        status: "not_found",
+        target,
+        content: "",
+        offset: page.offset,
+        ...(page.limit !== undefined ? { limit: page.limit } : {}),
+        returnedCharacters: 0,
+        characterCount: 0,
+        hasMore: false
+      };
+    }
+
+    const [rawContent, file] = await Promise.all([
+      readFile(filePath, "utf8"),
+      stat(filePath)
+    ]);
+    const characters = Array.from(rawContent);
+    const end = page.limit === undefined
+      ? characters.length
+      : Math.min(page.offset + page.limit, characters.length);
+    const content = characters.slice(page.offset, end).join("");
+
+    return {
+      status: "found",
+      target,
+      content,
+      offset: page.offset,
+      ...(page.limit !== undefined ? { limit: page.limit } : {}),
+      returnedCharacters: Array.from(content).length,
+      characterCount: characters.length,
+      hasMore: end < characters.length,
+      updatedAt: file.mtime.toISOString()
     };
   }
 }

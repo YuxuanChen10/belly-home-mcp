@@ -5,7 +5,9 @@ two functions:
 - Gateway HTTP API：设备配对、创建闹钟、查询、修改、取消、手机命令同步、结果 ACK。
 - Alarm MCP：`create_alarm` 保持最小权限，一次性闹钟创建仍走现有 plugin endpoint。
 
-- Diary MCP：`append_diary(content, title?)`、`read_diary(date?)`、`list_diary_entries(limit?, before?)`。
+- Diary MCP：`append_diary(content, title?, tags?)`、`update_diary(id, patch)`、`read_diary(date?)`、`list_diary_entries(limit?, before?)`。
+- Document MCP：`append_document(target, content, attachments?)`、`read_document(target, offset?, limit?)`；target 只允许 `design`、`development`、`knowledge`，读取按 Unicode 字符分页且不接受路径。
+- Domain 隔离：Diary 只通过 Diary tools 访问；Document tools 必须拒绝 `daily`，也不能解析或访问 Diary 路径。
 - Diary 存储：server 按 `Australia/Melbourne` 自动生成日期和时间；一天一个 UTF-8 Markdown 文件；同日 append-only。
 - Diary 安全：tool contract 不接受 path；read/list 日期必须是 `YYYY-MM-DD`；不提供 delete、overwrite、rename、move 或任意 filesystem。
 - Diary 日志：只记录调用 metadata，不记录正文、token、secret 或 `.env`。
@@ -40,11 +42,13 @@ npm run e2e:mcp -- "MCP test" 5
 
 预期结果：
 
-- MCP 工具清单包含 `create_alarm`、`append_diary`、`read_diary`、`list_diary_entries`。
+- MCP 工具清单包含 `create_alarm`、`append_diary`、`update_diary`、`read_diary`、`list_diary_entries`、`append_document`、`read_document`。
 - `create_alarm` 返回 `queued` 或 `scheduled`。
 - `append_diary` 返回当天日期和时间。
 - `read_diary` 能读回刚写入的内容。
 - `list_diary_entries` 包含当天日期，且只返回 metadata。
+- `read_document` 能读取固定逻辑 target，并返回分页信息与 `hasMore`。
+- `append_document` 和 `read_document` 都拒绝 `daily` target。
 
 ## 真机验收
 

@@ -17,14 +17,17 @@ export class AuditLog {
   }
 }
 
-export function createDiaryAuditEvent({
+export function createContentAuditEvent({
   tool,
   startedAt,
   durationMs,
   status,
   date,
   contentChars = 0,
-  target
+  target,
+  operation,
+  diaryId,
+  updatedFields
 }) {
   return {
     timestamp: startedAt.toISOString(),
@@ -34,6 +37,9 @@ export function createDiaryAuditEvent({
     status,
     date: date || null,
     contentChars,
-    ...(target ? { target } : {})
+    ...(target ? { target } : {}),
+    ...(operation ? { operation } : {}),
+    ...(diaryId ? { diaryId } : {}),
+    ...(updatedFields ? { updatedFields } : {})
   };
 }
