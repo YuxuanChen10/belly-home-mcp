@@ -8,12 +8,16 @@ This private local project connects natural-language requests to two home module
 ## What is included
 
 - `gateway/`: one persistent HTTP service for the Gateway API and MCP. The create-only MCP exposes alarm creation plus document tools.
+- `gateway/src/gateway/`: transport, dependency composition, and tool registration for the single `belly-home-mcp` server.
+- `gateway/src/modules/`: business-domain implementations. Memory owns Diary/Documents, Automation owns Alarm, and Desktop is an intentionally empty future boundary.
+- `gateway/src/common/`: small cross-domain primitives only.
 - `gateway/src/mcp-create-server.mjs`: least-privilege stdio MCP server exposing one-time alarm creation plus private Markdown diary tools.
 - `gateway/src/server.mjs`: the unified Gateway and Streamable HTTP MCP service.
 - `ios/`: SwiftUI iPhone client that pairs with the gateway, synchronizes commands, schedules AlarmKit alarms, and acknowledges results.
 - `skill/alarm-gateway/`: Codex skill that defines safe alarm behavior and the MCP tool contract.
 - `launchd/`: one LaunchAgent plist for keeping Belly Home online after login.
 - `MCP_SETUP.zh-CN.md`, `RUNBOOK.zh-CN.md`, `SECURITY.zh-CN.md`, `ROADMAP.zh-CN.md`: v0.2 operating documentation.
+- `ARCHITECTURE.md`: the domain-oriented architecture decision and evolution rules.
 
 The gateway distinguishes `queued` from `scheduled`. A request is only `scheduled` after the phone acknowledges that AlarmKit accepted it.
 
@@ -87,7 +91,7 @@ Relevant environment variables:
 - `DIARY_ROOT_DIR`, default `~/Library/Application Support/Belly Home Infra/Diary`
 - `DIARY_LOG_FILE`, default `~/Library/Logs/Belly Home Infra/diary-mcp.log`
 
-The original five-tool admin MCP remains available at `gateway/src/mcp-server.mjs` for local maintenance, but it is not the configuration intended for AI clients.
+The original five-tool Alarm admin adapter remains available at `gateway/src/mcp-server.mjs` solely for local backward compatibility. It lives inside the Automation module and is not deployed or connected as the Belly Home ChatGPT MCP. The production integration remains the single seven-tool `belly-home-mcp`.
 
 ## LaunchAgent configuration
 
