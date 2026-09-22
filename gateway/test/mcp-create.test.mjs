@@ -364,14 +364,14 @@ test("create-only Streamable HTTP MCP works end to end", async () => {
       }
     })
   });
-  assert.equal(discovery.status, 200);
+  assert.equal(discovery.status, 400);
   assert.equal(discovery.headers.has("mcp-session-id"), false);
   const discoveryBody = await discovery.json();
   assert.equal(discoveryBody.id, "openai-mcp-discover");
-  assert.equal(discoveryBody.result.resultType, "complete");
-  assert.equal(discoveryBody.result.supportedVersions[0], "2025-11-25");
-  assert.equal(discoveryBody.result.supportedVersions.includes("2026-07-28"), false);
-  assert.deepEqual(discoveryBody.result.capabilities, { tools: {} });
+  assert.equal(discoveryBody.error.code, -32022);
+  assert.equal(discoveryBody.error.data.requested, "2026-07-28");
+  assert.equal(discoveryBody.error.data.supported[0], "2025-11-25");
+  assert.equal(discoveryBody.error.data.supported.includes("2026-07-28"), false);
   const staleSession = await fetch(mcpUrl, {
     method: "POST",
     headers: {

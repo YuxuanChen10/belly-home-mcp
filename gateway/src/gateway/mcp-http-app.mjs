@@ -87,11 +87,7 @@ async function readJsonBody(request) {
 export function createMcpHttpHandler({
   createMcpServer,
   bearerToken = null,
-  logger = console,
-  discovery = {
-    serverInfo: { name: "belly-home-mcp", version: "0.2.0" },
-    instructions: "Belly Home exposes private Alarm, Memory, Document, and Desktop organization tools."
-  }
+  logger = console
 }) {
   const sessions = new Map();
 
@@ -213,17 +209,16 @@ export function createMcpHttpHandler({
             requestedProtocolVersion: request.headers["mcp-protocol-version"],
             supportedVersions: SUPPORTED_PROTOCOL_VERSIONS
           });
-          return json(response, 200, {
+          return json(response, 400, {
             jsonrpc: "2.0",
             id: discover.id,
-            result: {
-              resultType: "complete",
-              supportedVersions: SUPPORTED_PROTOCOL_VERSIONS,
-              capabilities: { tools: {} },
-              _meta: {
-                "io.modelcontextprotocol/serverInfo": discovery.serverInfo
-              },
-              instructions: discovery.instructions
+            error: {
+              code: -32022,
+              message: "Unsupported protocol version",
+              data: {
+                requested: request.headers["mcp-protocol-version"] ?? "2026-07-28",
+                supported: SUPPORTED_PROTOCOL_VERSIONS
+              }
             }
           });
         }
