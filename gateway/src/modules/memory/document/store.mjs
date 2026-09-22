@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { z } from "zod";
 
 const TARGETS = Object.freeze({
   design: { directory: "Design", file: "Design Diary.md", title: "Design Diary" },
@@ -11,6 +12,12 @@ const TARGETS = Object.freeze({
 });
 
 export const DOCUMENT_TARGETS = Object.freeze(Object.keys(TARGETS));
+
+export const DOCUMENT_TARGET_SCHEMA = z
+  .enum(DOCUMENT_TARGETS)
+  .describe(
+    "Document collection. Each collection contains one aggregate document and zero or more standalone documents."
+  );
 
 function defaultRootDirectory() {
   return join(homedir(), "Library", "Application Support", "Belly Home Infra");

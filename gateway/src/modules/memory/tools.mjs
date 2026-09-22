@@ -2,12 +2,15 @@ import { z } from "zod";
 import { toolFailure, toolResult } from "../../common/mcp-result.mjs";
 import { writeContentAudit } from "./audit.mjs";
 import { DiaryNotFoundError } from "./diary/store.mjs";
-import { DOCUMENT_TARGETS } from "./document/store.mjs";
+import { DOCUMENT_TARGET_SCHEMA } from "./document/store.mjs";
 
 function registerDiaryTools(server, diary, auditLog) {
   server.registerTool("append_diary", {
     title: "Append diary entry",
-    description: "Append Markdown content to today's private diary file. The server chooses the Australia/Melbourne date and time; callers cannot provide a path or date.",
+    description: `Append Markdown content to a Belly Home document collection.
+                 If title is omitted, append to the collection's aggregate document.
+                 If title is provided, append to the standalone document with that title.
+                 Callers should provide only semantic content. The Gateway owns document routing, storage paths, IDs, timestamps and version management.`,
     inputSchema: {
       content: z.string().min(1).max(diary.maxContentLength).describe("Markdown diary content to append verbatim"),
       title: z.string().trim().min(1).max(80).optional().describe("Optional entry title"),
@@ -33,7 +36,11 @@ function registerDiaryTools(server, diary, auditLog) {
 
   server.registerTool("update_diary", {
     title: "Update diary entry",
-    description: "Partially update one diary entry by its stable ID. Only supplied title, content, or tags are changed. The entry ID and createdAt remain unchanged, and the previous version is preserved.",
+    description: `Update an existing diary entry without creating a new one.
+                 Use this tool when previously recorded diary content should be corrected, expanded, or refined while preserving the same diary entry.
+                 Do not use this tool to record new thoughts or events. Create a new diary entry instead.
+                 The Gateway owns entry identity, version history, timestamps, and change tracking. Previous versions are preserved automatically.
+                 Callers provide the stable diary entry ID and only the fields that should change (\`title\`, \`content\`, or \`tags\`).Use update to improve an existing memory, not to create a new memory.`,
     inputSchema: {
       id: z.string().uuid(),
       patch: z.object({
@@ -62,7 +69,11 @@ function registerDiaryTools(server, diary, auditLog) {
 
   server.registerTool("read_diary", {
     title: "Read diary entry",
-    description: "Read one diary day. Defaults to today's Australia/Melbourne date. Missing files return not_found and do not create a file.",
+    description: `Read one day's private diary.
+                 Use this tool when you need to recall or continue a personal conversation from previous diary entries.
+                 Do not use this tool to access Design, Development, or Knowledge documents.
+                 The Gateway resolves the diary file and parses entry metadata.
+                 Callers provide only the diary date when reading a specific day.`,
     inputSchema: { date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD").optional() },
     outputSchema: {
       status: z.enum(["found", "not_found"]), date: z.string(), content: z.string().optional(),
@@ -84,7 +95,11 @@ function registerDiaryTools(server, diary, auditLog) {
 
   server.registerTool("list_diary_entries", {
     title: "List diary entries",
-    description: "List existing diary dates newest first. Returns metadata only, never diary body content.",
+    description: `List available diary days without reading diary contents.
+                 Use this tool to discover which diary dates exist before reading a specific day.
+                 Do not use this tool when the target date is already known.
+                 The Gateway returns metadata only and never exposes diary content.
+                 Callers may optionally limit the number of returned dates.`,
     inputSchema: { limit: z.number().int().min(1).max(100).default(20).optional(), before: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD").optional() },
     outputSchema: { entries: z.array(z.object({ date: z.string(), size: z.number(), updatedAt: z.string() })) },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
@@ -104,9 +119,11 @@ function registerDiaryTools(server, diary, auditLog) {
 function registerDocumentTools(server, documents, auditLog) {
   server.registerTool("create_document", {
     title: "Create Belly Home document",
-    description: "Create a standalone Design, Development, or Knowledge document with a stable ID. The gateway owns its storage path, timestamps, and initial version.",
+    description: `Create a standalone Design, Development, or Knowledge document with a stable ID. The gateway owns its storage path, timestamps, and initial version.
+                 Use this tool only when creating a new standalone document.
+                 Do not use it to continue an existing document.`,
     inputSchema: {
-      target: z.enum(DOCUMENT_TARGETS).describe("design, development, or knowledge"),
+      target: DOCUMENT_TARGET_SCHEMA,
       title: z.string().trim().min(1).max(160).regex(/^[^\r\n]+$/, "title must be a single line"),
       content: z.string().min(1).max(documents.maxContentLength),
       tags: z.array(z.string().trim().min(1).max(40)).max(documents.maxTags).default([]).optional(),
@@ -115,7 +132,7 @@ function registerDocumentTools(server, documents, auditLog) {
     outputSchema: {
       status: z.literal("created"),
       id: z.string().uuid(),
-      target: z.enum(DOCUMENT_TARGETS),
+      target: DOCUMENT_TARGET_SCHEMA,
       title: z.string(),
       tags: z.array(z.string()),
       version: z.literal(1),
@@ -139,9 +156,14 @@ function registerDocumentTools(server, documents, auditLog) {
 
   server.registerTool("append_document", {
     title: "Append Belly Home document",
-    description: "Append content to a Belly Home document. Provide title to route to a standalone document, or omit it to retain the legacy aggregate target behavior. The gateway owns IDs, paths, versions, and timestamps.",
+    description: `Append information to an existing Belly Home document.
+                 Use this tool when new information should become part of an existing long-term document rather than creating a new document.
+                 Do not use this tool when the information belongs in a new standalone document. Use \`create_document\` instead.
+                 If \`title\` is omitted, append to the collection's aggregate document. If \`title\` is provided, append to the standalone document with that title within the collection.
+                 The Gateway owns document routing, storage paths, IDs, timestamps, versions, and attachment management.
+                 Callers provide only the document collection, optional document title, semantic content, and optional attachments.`,
     inputSchema: {
-      target: z.enum(DOCUMENT_TARGETS).describe("design, development, or knowledge"),
+      target: DOCUMENT_TARGET_SCHEMA,
       title: z.string().trim().min(1).max(160).regex(/^[^\r\n]+$/, "title must be a single line").optional(),
       content: z.string().min(1).max(documents.maxContentLength).describe("Markdown content to append verbatim"),
       attachments: z.array(z.string().trim().min(1).max(500)).max(documents.maxAttachments).default([]).optional()
@@ -149,8 +171,7 @@ function registerDocumentTools(server, documents, auditLog) {
     outputSchema: {
       status: z.enum(["created", "appended"]),
       id: z.string().uuid().optional(),
-      target: z.enum(DOCUMENT_TARGETS),
-      title: z.string().optional(),
+      target: DOCUMENT_TARGET_SCHEMA,
       date: z.string(),
       time: z.string(),
       version: z.number().int().optional(),
@@ -173,9 +194,14 @@ function registerDocumentTools(server, documents, auditLog) {
 
   server.registerTool("read_document", {
     title: "Read Belly Home document",
-    description: "Read a shareable Belly Home document. Provide title to route to a standalone document, or omit it to retain the legacy aggregate target behavior. Use offset and limit for character-based pagination.",
+    description: `Read a Belly Home document without modifying it.
+                 Use this tool when you need to understand existing long-term information before reasoning, continuing previous work, or making updates.
+                 Do not use this tool to discover which documents exist or to modify document contents.
+                 If \`title\` is omitted, read the collection's aggregate document. If \`title\` is provided, read the standalone document with that title within the collection.
+                 The Gateway resolves document routing, pagination, storage, metadata, and version retrieval.
+                 Callers provide the document collection, optional document title, and optional pagination parameters.`,
     inputSchema: {
-      target: z.enum(DOCUMENT_TARGETS).describe("design, development, or knowledge"),
+      target: DOCUMENT_TARGET_SCHEMA,
       title: z.string().trim().min(1).max(160).regex(/^[^\r\n]+$/, "title must be a single line").optional(),
       offset: z.number().int().min(0).default(0).optional().describe("Zero-based Unicode character offset"),
       limit: z.number().int().min(1).max(documents.maxReadLength).optional().describe("Maximum Unicode characters to return")
@@ -183,7 +209,7 @@ function registerDocumentTools(server, documents, auditLog) {
     outputSchema: {
       status: z.enum(["found", "not_found"]),
       id: z.string().uuid().optional(),
-      target: z.enum(DOCUMENT_TARGETS),
+      target: DOCUMENT_TARGET_SCHEMA,
       title: z.string().optional(),
       tags: z.array(z.string()).optional(),
       version: z.number().int().optional(),

@@ -24,7 +24,11 @@ async function writeDesktopAudit(auditLog, event) {
 export function registerDesktopTools(server, { desktop, desktopAuditLog }) {
   server.registerTool("read_file_names", {
     title: "Read Desktop file names",
-    description: "Read metadata from only the first level of the user's macOS Desktop. Returns existing first-level folders and loose files with names, Desktop-relative paths, and extensions. It never scans inside folders and never opens or reads file contents. Use the folders as existing categories and analyze only looseFiles.",
+    description: `Read Desktop metadata without accessing file contents.
+                 Use this tool when you need to understand the current workspace before organizing files or making desktop-related decisions.
+                 Do not use this tool to read, summarize, or infer file contents. This tool exposes metadata only.
+                 The Gateway owns filesystem access, sandbox enforcement, metadata extraction, and permission handling.
+                 Callers provide only the request to inspect the Desktop. The returned metadata should be used for reasoning rather than content understanding.`,
     inputSchema: {},
     outputSchema: {
       status: z.literal("ready"),
@@ -68,7 +72,11 @@ export function registerDesktopTools(server, { desktop, desktopAuditLog }) {
 
   server.registerTool("move_files", {
     title: "Move approved Desktop files",
-    description: "Move loose files from the first level of Desktop into existing first-level Desktop folders after the user explicitly approves the proposed plan. Default is the only folder that may be created when absent. This operation cannot move folders or rename files. One native macOS window summarizes the full batch; duplicate destination names become Name (1), Name (2), and so on without overwriting.",
+    description: `Move Desktop items according to a user-approved organization plan.
+                 Use this tool only after the user has explicitly approved the proposed file movements.
+                 Do not use this tool to reorganize the Desktop autonomously or without user confirmation.
+                 The Gateway validates every move, enforces sandbox boundaries, verifies source and destination paths, and performs the actual filesystem operations.
+                 Callers provide only the approved organization plan. They should never construct filesystem paths manually or bypass the Gateway's validation.`,
     inputSchema: {
       snapshotId: z.string().uuid().describe("Recent Desktop snapshot returned by read_file_names"),
       moves: z.array(z.object({
