@@ -16,6 +16,9 @@ test("domain modules own business tools while the gateway only composes them", a
   const memoryTools = await text("modules/memory/tools.mjs");
   const automationTools = await text("modules/automation/tools.mjs");
   const desktop = await text("modules/desktop/index.mjs");
+  const desktopTools = await text("modules/desktop/tools.mjs");
+  const desktopHelper = await readFile(join(dirname(source), "native", "desktop-helper", "main.swift"), "utf8");
+  const deployScript = await readFile(join(dirname(source), "scripts", "deploy-mcp-update.mjs"), "utf8");
 
   assert.match(registry, /registerAutomationTools/);
   assert.match(registry, /registerMemoryTools/);
@@ -26,7 +29,16 @@ test("domain modules own business tools while the gateway only composes them", a
   assert.doesNotMatch(memoryTools, /"create_alarm"/);
   assert.match(automationTools, /"create_alarm"/);
   assert.doesNotMatch(automationTools, /"append_diary"|"read_document"/);
-  assert.doesNotMatch(desktop, /\.registerTool\(/);
+  assert.match(desktop, /registerDesktopTools/);
+  assert.match(desktopTools, /"read_file_names"/);
+  assert.match(desktopTools, /"move_files"/);
+  assert.doesNotMatch(desktopTools, /"append_diary"|"create_alarm"/);
+  assert.match(desktopHelper, /urls\(for: \.desktopDirectory, in: \.userDomainMask\)/);
+  assert.match(desktopHelper, /isSameDirectory\(selected, expected\)/);
+  assert.match(desktopHelper, /contentsOfDirectory/);
+  assert.doesNotMatch(desktopHelper, /FileManager\.default\.enumerator\(/);
+  assert.match(deployScript, /development and runtime binaries differ/);
+  assert.match(deployScript, /codesign.*--verify/s);
 });
 
 test("legacy source paths remain compatibility-only entry points", async () => {

@@ -18,7 +18,7 @@ try {
   await client.connect(transport);
   const tools = await client.listTools();
   const names = tools.tools.map((tool) => tool.name).sort();
-  const expected = ["append_diary", "append_document", "create_alarm", "list_diary_entries", "read_diary", "read_document", "update_diary"];
+  const expected = ["append_diary", "append_document", "create_alarm", "create_document", "list_diary_entries", "move_files", "read_diary", "read_document", "read_file_names", "update_diary"];
   if (JSON.stringify(names) !== JSON.stringify(expected)) {
     throw new Error(`Expected ${expected.join(", ")}, received: ${names.join(", ")}`);
   }

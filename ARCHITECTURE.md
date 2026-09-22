@@ -30,7 +30,9 @@ gateway/src/
 │   │   ├── alarm/
 │   │   └── tools.mjs
 │   └── desktop/
-│       └── index.mjs
+│       ├── index.mjs
+│       ├── helper-client.mjs
+│       └── tools.mjs
 └── common/
     ├── config.mjs
     ├── errors.mjs
@@ -68,9 +70,14 @@ Diary and Document remain separate subdomains. Diary tools never route through D
 
 ### Desktop
 
-- Reserved boundary only
-- No tools or behavior in v0.1
-- Future indexing, file search, organization, and Finder integration
+- Workspace Intelligence rooted exclusively at the current user's `~/Desktop`
+- Metadata-only scan of the first Desktop level; no folder is opened or scanned recursively
+- Existing first-level folders are user-defined categories; GPT analyzes only loose files from their names, relative paths, and extensions
+- GPT proposes where loose files should go, prefers `Default/` over uncertain classification, and waits for explicit user approval
+- `move_files` executes only approved loose-file moves into existing first-level folders; `Default/` is the sole folder it may create
+- Automatic `(1)`, `(2)` destination numbering on name conflicts; never overwrite
+- Native signed Swift Helper owns App Sandbox authorization and filesystem execution
+- No arbitrary-folder authorization, folder moves, file content reads, Finder Automation, Spotlight content queries, delete, copy, overwrite, or generic rename
 
 ## Evolution Rule
 
@@ -89,4 +96,4 @@ Users should not need to manage storage paths, routing, destinations, or module 
 - Preserve all current MCP tool names, schemas, and behavior.
 - Keep one production MCP server.
 - Prefer simple module ownership over framework-like abstraction.
-- Do not implement Desktop behavior until it is explicitly requested.
+- Desktop behavior must remain behind the metadata-only native Helper boundary.

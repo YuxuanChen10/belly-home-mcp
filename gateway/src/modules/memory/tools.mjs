@@ -102,20 +102,67 @@ function registerDiaryTools(server, diary, auditLog) {
 }
 
 function registerDocumentTools(server, documents, auditLog) {
-  server.registerTool("append_document", {
-    title: "Append Belly Home document",
-    description: "Append content to a Belly Home document. Choose a logical target; the gateway owns all storage paths and timestamps. Attachment values are references only and never cause file access.",
+  server.registerTool("create_document", {
+    title: "Create Belly Home document",
+    description: "Create a standalone Design, Development, or Knowledge document with a stable ID. The gateway owns its storage path, timestamps, and initial version.",
     inputSchema: {
       target: z.enum(DOCUMENT_TARGETS).describe("design, development, or knowledge"),
+      title: z.string().trim().min(1).max(160).regex(/^[^\r\n]+$/, "title must be a single line"),
+      content: z.string().min(1).max(documents.maxContentLength),
+      tags: z.array(z.string().trim().min(1).max(40)).max(documents.maxTags).default([]).optional(),
+      attachments: z.array(z.string().trim().min(1).max(500)).max(documents.maxAttachments).default([]).optional()
+    },
+    outputSchema: {
+      status: z.literal("created"),
+      id: z.string().uuid(),
+      target: z.enum(DOCUMENT_TARGETS),
+      title: z.string(),
+      tags: z.array(z.string()),
+      version: z.literal(1),
+      createdAt: z.string(),
+      updatedAt: z.string(),
+      attachmentCount: z.number().int(),
+      size: z.number()
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false }
+  }, async ({ target, title, content, tags, attachments }) => {
+    const startedAt = new Date();
+    try {
+      const { path: _path, ...result } = await documents.create({ target, title, content, tags, attachments });
+      await writeContentAudit({ auditLog, tool: "create_document", startedAt, status: result.status, contentChars: content.length, target });
+      return toolResult(result);
+    } catch (error) {
+      await writeContentAudit({ auditLog, tool: "create_document", startedAt, status: "error", contentChars: typeof content === "string" ? content.length : 0, target });
+      return toolFailure(error);
+    }
+  });
+
+  server.registerTool("append_document", {
+    title: "Append Belly Home document",
+    description: "Append content to a Belly Home document. Provide title to route to a standalone document, or omit it to retain the legacy aggregate target behavior. The gateway owns IDs, paths, versions, and timestamps.",
+    inputSchema: {
+      target: z.enum(DOCUMENT_TARGETS).describe("design, development, or knowledge"),
+      title: z.string().trim().min(1).max(160).regex(/^[^\r\n]+$/, "title must be a single line").optional(),
       content: z.string().min(1).max(documents.maxContentLength).describe("Markdown content to append verbatim"),
       attachments: z.array(z.string().trim().min(1).max(500)).max(documents.maxAttachments).default([]).optional()
     },
-    outputSchema: { status: z.enum(["created", "appended"]), target: z.enum(DOCUMENT_TARGETS), date: z.string(), time: z.string(), attachmentCount: z.number().int(), size: z.number() },
+    outputSchema: {
+      status: z.enum(["created", "appended"]),
+      id: z.string().uuid().optional(),
+      target: z.enum(DOCUMENT_TARGETS),
+      title: z.string().optional(),
+      date: z.string(),
+      time: z.string(),
+      version: z.number().int().optional(),
+      updatedAt: z.string().optional(),
+      attachmentCount: z.number().int(),
+      size: z.number()
+    },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false }
-  }, async ({ target, content, attachments }) => {
+  }, async ({ target, title, content, attachments }) => {
     const startedAt = new Date();
     try {
-      const { path: _path, ...result } = await documents.append({ target, content, attachments });
+      const { path: _path, ...result } = await documents.append({ target, title, content, attachments });
       await writeContentAudit({ auditLog, tool: "append_document", startedAt, status: result.status, date: result.date, contentChars: content.length, target });
       return toolResult(result);
     } catch (error) {
@@ -126,18 +173,34 @@ function registerDocumentTools(server, documents, auditLog) {
 
   server.registerTool("read_document", {
     title: "Read Belly Home document",
-    description: "Read a shareable Belly Home knowledge document by logical target. Use offset and limit for character-based pagination; omit limit to read through the end. Diary is a separate private domain and must be accessed with read_diary. Callers cannot provide a file path.",
+    description: "Read a shareable Belly Home document. Provide title to route to a standalone document, or omit it to retain the legacy aggregate target behavior. Use offset and limit for character-based pagination.",
     inputSchema: {
       target: z.enum(DOCUMENT_TARGETS).describe("design, development, or knowledge"),
+      title: z.string().trim().min(1).max(160).regex(/^[^\r\n]+$/, "title must be a single line").optional(),
       offset: z.number().int().min(0).default(0).optional().describe("Zero-based Unicode character offset"),
       limit: z.number().int().min(1).max(documents.maxReadLength).optional().describe("Maximum Unicode characters to return")
     },
-    outputSchema: { status: z.enum(["found", "not_found"]), target: z.enum(DOCUMENT_TARGETS), content: z.string(), offset: z.number().int(), limit: z.number().int().optional(), returnedCharacters: z.number().int(), characterCount: z.number().int(), hasMore: z.boolean(), updatedAt: z.string().optional() },
+    outputSchema: {
+      status: z.enum(["found", "not_found"]),
+      id: z.string().uuid().optional(),
+      target: z.enum(DOCUMENT_TARGETS),
+      title: z.string().optional(),
+      tags: z.array(z.string()).optional(),
+      version: z.number().int().optional(),
+      createdAt: z.string().optional(),
+      content: z.string(),
+      offset: z.number().int(),
+      limit: z.number().int().optional(),
+      returnedCharacters: z.number().int(),
+      characterCount: z.number().int(),
+      hasMore: z.boolean(),
+      updatedAt: z.string().optional()
+    },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
-  }, async ({ target, offset, limit }) => {
+  }, async ({ target, title, offset, limit }) => {
     const startedAt = new Date();
     try {
-      const { path: _path, ...result } = await documents.read({ target, offset, limit });
+      const { path: _path, ...result } = await documents.read({ target, title, offset, limit });
       await writeContentAudit({ auditLog, tool: "read_document", startedAt, status: result.status, target });
       return toolResult(result);
     } catch (error) {

@@ -1,15 +1,17 @@
 # Belly Home MCP
 
-This private local project connects natural-language requests to two home modules:
+This private local project connects natural-language requests to three home domains:
 
 - Alarm: create app-owned iPhone alarms through the existing Alarm Gateway and iOS app.
 - Diary: append, read, and list private Markdown diary entries through the same MCP boundary.
+- Desktop: scan the complete `~/Desktop` workspace without reading content, let GPT propose an organization plan, then apply that reviewed plan after one native summary confirmation.
 
 ## What is included
 
 - `gateway/`: one persistent HTTP service for the Gateway API and MCP. The create-only MCP exposes alarm creation plus document tools.
 - `gateway/src/gateway/`: transport, dependency composition, and tool registration for the single `belly-home-mcp` server.
-- `gateway/src/modules/`: business-domain implementations. Memory owns Diary/Documents, Automation owns Alarm, and Desktop is an intentionally empty future boundary.
+- `gateway/src/modules/`: business-domain implementations. Memory owns Diary/Documents, Automation owns Alarm, and Desktop owns metadata-only workspace organization.
+- `gateway/native/desktop-helper/`: signed, sandboxed Swift helper for Desktop metadata enumeration and batch-confirmed atomic moves.
 - `gateway/src/common/`: small cross-domain primitives only.
 - `gateway/src/mcp-create-server.mjs`: least-privilege stdio MCP server exposing one-time alarm creation plus private Markdown diary tools.
 - `gateway/src/server.mjs`: the unified Gateway and Streamable HTTP MCP service.
@@ -71,7 +73,17 @@ For the final least-privilege integration, start the gateway first and register 
 node --env-file=/absolute/path/to/gateway/.env /absolute/path/to/gateway/src/mcp-create-server.mjs
 ```
 
-It exposes `create_alarm`, `append_diary`, `update_diary`, `read_diary`, `list_diary_entries`, `append_document`, and `read_document`. The configured phone ID is never accepted from the MCP caller, and the MCP process uses `ALARM_PLUGIN_TOKEN`, which is accepted only by the create-only Gateway route. Diary is the private life domain: its tools use the server's `Australia/Melbourne` date, maintain stable entry IDs, and preserve update history. Document is the shareable knowledge domain: `append_document` and `read_document` accept only `design`, `development`, or `knowledge`, support Unicode character pagination for reads, and never accept a file path. Diary is never exposed through a Document target.
+It exposes ten tools: the existing Alarm, Diary, and Document tools plus `read_file_names` and `move_files`. Desktop access is rooted permanently at `~/Desktop`; it is never an arbitrary folder selected for management. `read_file_names` returns only first-level folder names and loose-file names, relative paths, and extensions. It never scans inside folders or reads file contents. GPT analyzes only loose files, uses the existing folders as user-defined categories, and presents a proposal before execution. Low-confidence files should go to `Default/`. The native helper skips hidden items, packages, and symbolic links and shows one on-device summary confirmation for the complete approved plan. `move_files` can only move loose files into existing first-level folders; `Default/` is the sole folder it may create. Destination conflicts are resolved as `Name (1)`, `Name (2)`, and so on without overwriting. The configured phone ID is never accepted from the MCP caller, and the MCP process uses `ALARM_PLUGIN_TOKEN`, which is accepted only by the create-only Gateway route. Diary is the private life domain. Document is the shareable knowledge domain and never accepts a file path.
+
+Build and authorize the native Desktop Helper once before using Desktop tools:
+
+```bash
+cd gateway
+npm run desktop:build
+npm run desktop:authorize
+```
+
+The helper is packaged as a background-only macOS app so its App Sandbox and security-scoped bookmark have a stable application identity. Development builds use ad-hoc signing when `BELLY_DESKTOP_SIGNING_IDENTITY` is unset and may require reauthorization after a rebuild. Set that environment variable to a stable code-signing identity for persistent authorization across updates.
 
 For Streamable HTTP, run the unified service:
 
@@ -90,8 +102,10 @@ Relevant environment variables:
 - `ALARM_TIMEZONE`, default `Australia/Melbourne`
 - `DIARY_ROOT_DIR`, default `~/Library/Application Support/Belly Home Infra/Diary`
 - `DIARY_LOG_FILE`, default `~/Library/Logs/Belly Home Infra/diary-mcp.log`
+- `BELLY_DESKTOP_HELPER_PATH`, optional override for the signed native helper
+- `DESKTOP_LOG_FILE`, default `~/Library/Logs/Belly Home Infra/desktop-mcp.log`
 
-The original five-tool Alarm admin adapter remains available at `gateway/src/mcp-server.mjs` solely for local backward compatibility. It lives inside the Automation module and is not deployed or connected as the Belly Home ChatGPT MCP. The production integration remains the single seven-tool `belly-home-mcp`.
+The original five-tool Alarm admin adapter remains available at `gateway/src/mcp-server.mjs` solely for local backward compatibility. It lives inside the Automation module and is not deployed or connected as the Belly Home ChatGPT MCP. The production integration remains the single ten-tool `belly-home-mcp`.
 
 ## LaunchAgent configuration
 

@@ -1,14 +1,28 @@
-import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 
 const sourceRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const runtimeRoot = join(homedir(), "Library", "Application Support", "Belly Home Infra", "gateway");
 const sourceEnv = await readFile(join(sourceRoot, ".env"), "utf8");
 const sourcePort = sourceEnv.match(/^BELLY_HOME_PORT=(\d+)$/m)?.[1];
 if (!sourcePort) throw new Error("Development .env must define BELLY_HOME_PORT");
+
+function runProcess(command, args, stdio = "inherit") {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { stdio });
+    child.once("error", reject);
+    child.once("exit", (code) => code === 0
+      ? resolve()
+      : reject(new Error(`${command} exited with ${code}`)));
+  });
+}
+
+await runProcess(process.execPath, [join(sourceRoot, "scripts", "build-desktop-helper.mjs")]);
+
 const files = [
   "src/app.mjs",
   "src/audit-log.mjs",
@@ -39,6 +53,8 @@ const files = [
   "src/modules/automation/alarm/store.mjs",
   "src/modules/automation/alarm/validation.mjs",
   "src/modules/desktop/index.mjs",
+  "src/modules/desktop/helper-client.mjs",
+  "src/modules/desktop/tools.mjs",
   "src/modules/memory/audit-log.mjs",
   "src/modules/memory/audit.mjs",
   "src/modules/memory/diary/store.mjs",
@@ -46,11 +62,20 @@ const files = [
   "src/modules/memory/tools.mjs",
   "test/architecture.test.mjs",
   "test/document-store.test.mjs",
+  "test/desktop-helper-client.test.mjs",
+  "test/desktop-native-helper.test.mjs",
+  "test/fixtures/fake-desktop-helper.mjs",
   "test/diary-store.test.mjs",
   "test/gateway.test.mjs",
   "test/launchd.test.mjs",
   "test/mcp-create.test.mjs",
   "scripts/mcp-e2e.mjs",
+  "scripts/test.mjs",
+  "scripts/build-desktop-helper.mjs",
+  "scripts/authorize-desktop-helper.mjs",
+  "native/desktop-helper/main.swift",
+  "native/desktop-helper/DesktopHelper.entitlements",
+  "native/desktop-helper/Info.plist",
   ".env.example"
 ];
 
@@ -59,6 +84,21 @@ for (const relativePath of files) {
   await mkdir(dirname(destination), { recursive: true });
   await copyFile(join(sourceRoot, relativePath), destination);
 }
+
+const helperBundle = join("native", "desktop-helper", "bin", "BellyHomeDesktopHelper.app");
+await rm(join(runtimeRoot, helperBundle), { recursive: true, force: true });
+await cp(join(sourceRoot, helperBundle), join(runtimeRoot, helperBundle), { recursive: true });
+
+const helperExecutable = join("Contents", "MacOS", "belly-desktop-helper");
+const [sourceHelper, runtimeHelper] = await Promise.all([
+  readFile(join(sourceRoot, helperBundle, helperExecutable)),
+  readFile(join(runtimeRoot, helperBundle, helperExecutable))
+]);
+const digest = (content) => createHash("sha256").update(content).digest("hex");
+if (digest(sourceHelper) !== digest(runtimeHelper)) {
+  throw new Error("Desktop Helper verification failed: development and runtime binaries differ");
+}
+await runProcess("codesign", ["--verify", "--deep", "--strict", join(runtimeRoot, helperBundle)]);
 
 const runtimeEnvFile = join(runtimeRoot, ".env");
 const runtimeEnv = await readFile(runtimeEnvFile, "utf8");

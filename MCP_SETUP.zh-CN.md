@@ -1,14 +1,17 @@
 # Belly Home MCP v0.2 运行与连接
 
-这个版本使用一个进程和一个 `BELLY_HOME_PORT` 同时提供 Gateway API 与 MCP。MCP 暴露七个工具：
+这个版本使用一个进程和一个 `BELLY_HOME_PORT` 同时提供 Gateway API 与 MCP。MCP 暴露十个工具：
 
 - `create_alarm`
 - `append_diary`
 - `update_diary`
 - `read_diary`
 - `list_diary_entries`
+- `create_document`
 - `append_document`
 - `read_document`
+- `read_file_names`
+- `move_files`
 
 ## 权限边界
 
@@ -17,7 +20,8 @@
 - Diary 文件是 UTF-8 Markdown，一天一个 `YYYY-MM-DD.md`，默认保存在 `~/Library/Application Support/Belly Home Infra/Diary`。
 - Diary 调用日志默认写入 `~/Library/Logs/Belly Home Infra/diary-mcp.log`，只记录 tool、耗时、状态、日期和字符数，不记录正文、token 或 `.env`。
 - Diary 是私人的人生记录，只能通过 `append_diary`、`read_diary`、`update_diary`、`list_diary_entries` 访问。
-- Document 是可分享的知识记录；`append_document` 和 `read_document` 只接受 `design`、`development`、`knowledge`，其中读取的 `offset` 和 `limit` 按 Unicode 字符分页。Document 不接受 `daily` 或文件路径。
+- Document 是可分享的知识记录；`create_document` 创建带稳定 UUID、时间戳和首个版本的独立文档，存放在对应 target 的 `Documents/<uuid>.md`。`read_document` 与 `append_document` 可选传入 title，由 Gateway 路由到 UUID 文档；不传 title 时保持原有聚合文档行为。同一 target 内标题经过 Unicode 规范化并忽略大小写后必须唯一。Document tools 不接受 `daily` 或文件路径。
+- Desktop 的唯一 root 是 `~/Desktop`，不能授权或切换到任意文件夹。`read_file_names` 只读取第一层已有 Folder 和 Loose Files 的名称、相对路径与扩展名，不进入任何 Folder，也不读取文件内容。GPT 只分析 Loose Files，把已有第一层 Folder 视为用户定义的分类；低置信度文件使用 `Default/`。用户明确同意整理方案后才能调用 `move_files`。它只能把第一层 Loose Files 移入已有第一层 Folder，唯一可新建的目标是 `Default/`。每批执行只显示一个 Mac 原生汇总确认窗口；同名目标自动增加 `(1)`、`(2)` 后缀，绝不覆盖。
 - Cloudflare Tunnel 只发布统一端口上的 `/mcp` 路径。
 
 ## 首次设置
@@ -28,6 +32,8 @@
 cd "/Users/cc/Desktop/ideas/belly home/belly-home-mcp/gateway"
 npm install
 cp .env.example .env
+npm run desktop:build
+npm run desktop:authorize
 ```
 
 在 `.env` 中填写：
@@ -79,7 +85,7 @@ cd "/Users/cc/Desktop/ideas/belly home/belly-home-mcp/gateway"
 npm run e2e:mcp -- "MCP test" 5
 ```
 
-脚本会确认 MCP 暴露七个工具，并检查 alarm、diary update 和 document read 调用链。
+脚本会确认 MCP 暴露十个工具，并检查 alarm、diary update 和 document read 调用链。完整 `npm test` 还会验证 Desktop metadata、路径隔离、确认取消和原子移动。
 
 ## 连接 ChatGPT
 
@@ -92,4 +98,4 @@ tunnel-client doctor --profile belly-home --explain
 tunnel-client run --profile belly-home
 ```
 
-在 ChatGPT Developer mode 中刷新现有 Plugin。扫描工具时应看到 `create_alarm`、`append_diary`、`update_diary`、`read_diary`、`list_diary_entries`、`append_document`、`read_document`。
+在 ChatGPT Developer mode 中刷新现有 Plugin。工具清单中还应看到 `read_file_names` 和 `move_files`。

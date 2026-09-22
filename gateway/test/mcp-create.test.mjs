@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -25,6 +25,7 @@ async function fixture() {
   const diaryRootDirectory = join(directory, "diary");
   const documentRootDirectory = join(directory, "belly-home");
   const diaryLogFile = join(directory, "logs", "diary-mcp.log");
+  const desktopLogFile = join(directory, "logs", "desktop-mcp.log");
   const adminToken = "mcp-admin-token";
   const pluginToken = "mcp-plugin-token";
 
@@ -61,7 +62,8 @@ async function fixture() {
     device,
     diaryRootDirectory,
     documentRootDirectory,
-    diaryLogFile
+    diaryLogFile,
+    desktopLogFile
   };
 }
 
@@ -72,8 +74,11 @@ function assertMinimalTools(tools) {
     "update_diary",
     "read_diary",
     "list_diary_entries",
+    "create_document",
     "append_document",
-    "read_document"
+    "read_document",
+    "read_file_names",
+    "move_files"
   ]);
   const alarmTool = tools.tools.find((tool) => tool.name === "create_alarm");
   assert.deepEqual(Object.keys(alarmTool.inputSchema.properties).sort(), ["fireAt", "label"]);
@@ -86,15 +91,28 @@ function assertMinimalTools(tools) {
   const updateTool = tools.tools.find((tool) => tool.name === "update_diary");
   assert.deepEqual(Object.keys(updateTool.inputSchema.properties).sort(), ["id", "patch"]);
   assert.equal(updateTool.annotations.destructiveHint, false);
+  const createDocumentTool = tools.tools.find((tool) => tool.name === "create_document");
+  assert.deepEqual(Object.keys(createDocumentTool.inputSchema.properties).sort(), ["attachments", "content", "tags", "target", "title"]);
+  assert.deepEqual(createDocumentTool.inputSchema.properties.target.enum, ["design", "development", "knowledge"]);
+  assert.equal(createDocumentTool.annotations.readOnlyHint, false);
   const documentTool = tools.tools.find((tool) => tool.name === "append_document");
-  assert.deepEqual(Object.keys(documentTool.inputSchema.properties).sort(), ["attachments", "content", "target"]);
+  assert.deepEqual(Object.keys(documentTool.inputSchema.properties).sort(), ["attachments", "content", "target", "title"]);
   assert.deepEqual(documentTool.inputSchema.properties.target.enum, ["design", "development", "knowledge"]);
   const readDocumentTool = tools.tools.find((tool) => tool.name === "read_document");
-  assert.deepEqual(Object.keys(readDocumentTool.inputSchema.properties).sort(), ["limit", "offset", "target"]);
+  assert.deepEqual(Object.keys(readDocumentTool.inputSchema.properties).sort(), ["limit", "offset", "target", "title"]);
   assert.deepEqual(readDocumentTool.inputSchema.properties.target.enum, ["design", "development", "knowledge"]);
   assert.equal(readDocumentTool.annotations.readOnlyHint, true);
   assert.equal(readDocumentTool.annotations.destructiveHint, false);
   assert.equal(readDocumentTool.annotations.openWorldHint, false);
+  const readFileNamesTool = tools.tools.find((tool) => tool.name === "read_file_names");
+  assert.deepEqual(Object.keys(readFileNamesTool.inputSchema.properties).sort(), []);
+  assert.equal(readFileNamesTool.annotations.readOnlyHint, true);
+  assert.equal(readFileNamesTool.annotations.destructiveHint, false);
+  const moveFilesTool = tools.tools.find((tool) => tool.name === "move_files");
+  assert.deepEqual(Object.keys(moveFilesTool.inputSchema.properties).sort(), ["moves", "snapshotId"]);
+  assert.equal(moveFilesTool.annotations.readOnlyHint, false);
+  assert.equal(moveFilesTool.annotations.destructiveHint, true);
+  assert.equal(moveFilesTool.annotations.openWorldHint, false);
 }
 
 async function callCreate(client, label) {
@@ -107,8 +125,10 @@ async function callCreate(client, label) {
   });
 }
 
-test("create-only stdio MCP exposes alarm and diary tools", async () => {
-  const { gateway, port, pluginToken, diaryRootDirectory, documentRootDirectory, diaryLogFile } = await fixture();
+test("create-only stdio MCP exposes alarm, memory, and Desktop tools", async () => {
+  const { gateway, port, pluginToken, diaryRootDirectory, documentRootDirectory, diaryLogFile, desktopLogFile } = await fixture();
+  const fakeDesktopHelper = join(gatewayDirectory, "test", "fixtures", "fake-desktop-helper.mjs");
+  await chmod(fakeDesktopHelper, 0o700);
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [join(gatewayDirectory, "src/mcp-create-server.mjs")],
@@ -120,7 +140,9 @@ test("create-only stdio MCP exposes alarm and diary tools", async () => {
       ALARM_TIMEZONE: "Australia/Melbourne",
       DIARY_ROOT_DIR: diaryRootDirectory,
       BELLY_HOME_ROOT_DIR: documentRootDirectory,
-      DIARY_LOG_FILE: diaryLogFile
+      DIARY_LOG_FILE: diaryLogFile,
+      BELLY_DESKTOP_HELPER_PATH: fakeDesktopHelper,
+      DESKTOP_LOG_FILE: desktopLogFile
     },
     stderr: "pipe"
   });
@@ -171,6 +193,47 @@ test("create-only stdio MCP exposes alarm and diary tools", async () => {
     });
     assert.deepEqual(listed.structuredContent.entries.map((entry) => entry.date), [append.structuredContent.date]);
 
+    const createdDocument = await client.callTool({
+      name: "create_document",
+      arguments: {
+        target: "development",
+        title: "Standalone MCP document",
+        content: "first document version",
+        tags: ["mcp", "test"],
+        attachments: ["fixture-reference"]
+      }
+    });
+    assert.equal(createdDocument.isError, undefined);
+    assert.equal(createdDocument.structuredContent.status, "created");
+    assert.equal(createdDocument.structuredContent.version, 1);
+    assert.equal(createdDocument.structuredContent.createdAt, createdDocument.structuredContent.updatedAt);
+    assert.match(
+      await readFile(join(documentRootDirectory, "Development", "Documents", `${createdDocument.structuredContent.id}.md`), "utf8"),
+      /first document version/
+    );
+
+    const appendedStandalone = await client.callTool({
+      name: "append_document",
+      arguments: {
+        target: "development",
+        title: "Standalone MCP document",
+        content: "second document version"
+      }
+    });
+    assert.equal(appendedStandalone.isError, undefined);
+    assert.equal(appendedStandalone.structuredContent.id, createdDocument.structuredContent.id);
+    assert.equal(appendedStandalone.structuredContent.version, 2);
+
+    const readStandalone = await client.callTool({
+      name: "read_document",
+      arguments: { target: "development", title: "standalone mcp document" }
+    });
+    assert.equal(readStandalone.isError, undefined);
+    assert.equal(readStandalone.structuredContent.id, createdDocument.structuredContent.id);
+    assert.equal(readStandalone.structuredContent.version, 2);
+    assert.match(readStandalone.structuredContent.content, /first document version/);
+    assert.match(readStandalone.structuredContent.content, /second document version/);
+
     const document = await client.callTool({
       name: "append_document",
       arguments: {
@@ -197,6 +260,27 @@ test("create-only stdio MCP exposes alarm and diary tools", async () => {
     assert.equal(readDocument.structuredContent.hasMore, true);
     assert.match(readDocument.structuredContent.content, /^# Design Diary/);
 
+    const desktop = await client.callTool({
+      name: "read_file_names",
+      arguments: {}
+    });
+    assert.equal(desktop.isError, undefined);
+    assert.equal(desktop.structuredContent.folders[0].folderName, "Career");
+    assert.equal(desktop.structuredContent.looseFiles[0].filename, "Resume.pdf");
+    assert.equal(desktop.structuredContent.looseFiles[0].relativePath, "Resume.pdf");
+    assert.equal(desktop.structuredContent.looseFiles[0].extension, "pdf");
+
+    const desktopMove = await client.callTool({
+      name: "move_files",
+      arguments: {
+        snapshotId: desktop.structuredContent.snapshotId,
+        moves: [{ sourceRelativePath: "Resume.pdf", destinationRelativePath: "Career/Resume.pdf" }]
+      }
+    });
+    assert.equal(desktopMove.isError, undefined);
+    assert.equal(desktopMove.structuredContent.status, "moved");
+    assert.equal(desktopMove.structuredContent.movedCount, 1);
+
     const logText = await readFile(diaryLogFile, "utf8");
     assert.equal(logText.includes("hello diary"), false);
     const events = logText.trim().split("\n").map((line) => JSON.parse(line));
@@ -205,6 +289,9 @@ test("create-only stdio MCP exposes alarm and diary tools", async () => {
       "update_diary",
       "read_diary",
       "list_diary_entries",
+      "create_document",
+      "append_document",
+      "read_document",
       "append_document",
       "read_document"
     ]);
@@ -212,8 +299,20 @@ test("create-only stdio MCP exposes alarm and diary tools", async () => {
     assert.equal(events[1].operation, "UPDATE");
     assert.equal(events[1].diaryId, append.structuredContent.id);
     assert.deepEqual(events[1].updatedFields, ["title", "tags"]);
-    assert.equal(events[4].target, "design");
-    assert.equal(events[5].target, "design");
+    assert.equal(events[4].target, "development");
+    assert.equal(events[5].target, "development");
+    assert.equal(events[6].target, "development");
+    assert.equal(events[7].target, "design");
+    assert.equal(events[8].target, "design");
+
+    const desktopEventsText = await readFile(desktopLogFile, "utf8");
+    assert.equal(desktopEventsText.includes("Resume.pdf"), false);
+    const desktopEvents = desktopEventsText.trim().split("\n").map((line) => JSON.parse(line));
+    assert.deepEqual(desktopEvents.map((event) => event.tool), [
+      "read_file_names",
+      "move_files"
+    ]);
+    assert.equal(desktopEvents[1].successCount, 1);
   } finally {
     await client.close();
     await new Promise((resolve) => gateway.close(resolve));

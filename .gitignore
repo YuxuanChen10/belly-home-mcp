@@ -3,6 +3,7 @@ node_modules/
 gateway/.env
 gateway/data/*.json
 gateway/data/*.tmp
+gateway/native/desktop-helper/bin/
 work/
 outputs/
 *.xcuserstate
