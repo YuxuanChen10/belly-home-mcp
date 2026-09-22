@@ -23,6 +23,7 @@
 - Document 是可分享的知识记录；`create_document` 创建带稳定 UUID、时间戳和首个版本的独立文档，存放在对应 target 的 `Documents/<uuid>.md`。`read_document` 与 `append_document` 可选传入 title，由 Gateway 路由到 UUID 文档；不传 title 时保持原有聚合文档行为。同一 target 内标题经过 Unicode 规范化并忽略大小写后必须唯一。Document tools 不接受 `daily` 或文件路径。
 - Desktop 的唯一 root 是 `~/Desktop`，不能授权或切换到任意文件夹。`read_file_names` 只读取第一层已有 Folder 和 Loose Files 的名称、相对路径与扩展名，不进入任何 Folder，也不读取文件内容。GPT 只分析 Loose Files，把已有第一层 Folder 视为用户定义的分类；低置信度文件使用 `Default/`。用户明确同意整理方案后才能调用 `move_files`。它只能把第一层 Loose Files 移入已有第一层 Folder，唯一可新建的目标是 `Default/`。每批执行只显示一个 Mac 原生汇总确认窗口；同名目标自动增加 `(1)`、`(2)` 后缀，绝不覆盖。
 - Cloudflare Tunnel 只发布统一端口上的 `/mcp` 路径。
+- MCP HTTP endpoint 兼容 `2026-07-28` 客户端的 `server/discover` 预探测，但只声明 SDK 1.30.0 实际支持的 legacy 协议版本。客户端应随后降级到 `2025-11-25` 的 `initialize` session；服务端不虚假声明支持完整 stateless 2026 协议。
 
 ## 首次设置
 

@@ -31,6 +31,7 @@ npm test
 - Alarm 回归流程。
 - stdio MCP 暴露 alarm + diary tools，并实际 append/read/list。
 - Streamable HTTP MCP 端到端创建 alarm。
+- `server/discover` 返回 200，并明确协商到 SDK 实际支持的 `2025-11-25`；同一 endpoint 的 legacy initialize、tools/list 和 tools/call 回归流程继续通过。
 - LaunchAgent plist 不依赖 Desktop、Documents 或 Downloads 作为工作目录。
 - Desktop Helper 可列出无内容读取权限的文件名；取消汇总确认不产生改动；批准后只做同卷原子移动；同名目标自动变为 `(1)`、`(2)` 且保留原文件；`../` 路径逃逸被拒绝。
 

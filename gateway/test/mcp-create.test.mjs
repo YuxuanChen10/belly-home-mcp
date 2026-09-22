@@ -344,6 +344,34 @@ test("create-only Streamable HTTP MCP works end to end", async () => {
   const mcpUrl = `${baseUrl}/mcp`;
   const initialGet = await fetch(mcpUrl, { method: "GET" });
   assert.equal(initialGet.status, 405);
+  const discovery = await fetch(mcpUrl, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+      "mcp-protocol-version": "2026-07-28"
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: "openai-mcp-discover",
+      method: "server/discover",
+      params: {
+        _meta: {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientInfo": { name: "test-client", version: "1.0.0" },
+          "io.modelcontextprotocol/clientCapabilities": {}
+        }
+      }
+    })
+  });
+  assert.equal(discovery.status, 200);
+  assert.equal(discovery.headers.has("mcp-session-id"), false);
+  const discoveryBody = await discovery.json();
+  assert.equal(discoveryBody.id, "openai-mcp-discover");
+  assert.equal(discoveryBody.result.resultType, "complete");
+  assert.equal(discoveryBody.result.supportedVersions[0], "2025-11-25");
+  assert.equal(discoveryBody.result.supportedVersions.includes("2026-07-28"), false);
+  assert.deepEqual(discoveryBody.result.capabilities, { tools: {} });
   const staleSession = await fetch(mcpUrl, {
     method: "POST",
     headers: {

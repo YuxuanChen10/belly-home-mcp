@@ -1,6 +1,7 @@
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer as createNodeServer } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { SUPPORTED_PROTOCOL_VERSIONS } from "@modelcontextprotocol/sdk/types.js";
 
 const MAX_LOGGED_BODY_BYTES = 1_000_000;
 
@@ -59,6 +60,13 @@ function bodyHasInitialize(body) {
   return summarizeRpcBody(body).some((message) => message.method === "initialize");
 }
 
+function discoverRequest(body) {
+  if (!body || Array.isArray(body) || body.method !== "server/discover") {
+    return null;
+  }
+  return Object.hasOwn(body, "id") ? body : null;
+}
+
 async function readJsonBody(request) {
   const chunks = [];
   let totalBytes = 0;
@@ -76,7 +84,15 @@ async function readJsonBody(request) {
   return JSON.parse(text);
 }
 
-export function createMcpHttpHandler({ createMcpServer, bearerToken = null, logger = console }) {
+export function createMcpHttpHandler({
+  createMcpServer,
+  bearerToken = null,
+  logger = console,
+  discovery = {
+    serverInfo: { name: "belly-home-mcp", version: "0.2.0" },
+    instructions: "Belly Home exposes private Alarm, Memory, Document, and Desktop organization tools."
+  }
+}) {
   const sessions = new Map();
 
   async function closeSession(sessionId) {
@@ -190,6 +206,27 @@ export function createMcpHttpHandler({ createMcpServer, bearerToken = null, logg
           hasInitialize: bodyHasInitialize(parsedBody),
           messages: summarizeRpcBody(parsedBody)
         });
+        const discover = discoverRequest(parsedBody);
+        if (discover) {
+          logLifecycle(logger, "server_discover", {
+            requestId,
+            requestedProtocolVersion: request.headers["mcp-protocol-version"],
+            supportedVersions: SUPPORTED_PROTOCOL_VERSIONS
+          });
+          return json(response, 200, {
+            jsonrpc: "2.0",
+            id: discover.id,
+            result: {
+              resultType: "complete",
+              supportedVersions: SUPPORTED_PROTOCOL_VERSIONS,
+              capabilities: { tools: {} },
+              _meta: {
+                "io.modelcontextprotocol/serverInfo": discovery.serverInfo
+              },
+              instructions: discovery.instructions
+            }
+          });
+        }
       }
 
       if (sessionId) {
