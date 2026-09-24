@@ -12,6 +12,18 @@ export function createUnifiedHttpServer({ gatewayHandler, mcpHandler }) {
       }
       return mcpHandler(request, response);
     }
+    const startedAt = Date.now();
+    response.once("finish", () => {
+      console.log(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        category: "alarm_http",
+        event: "response",
+        method: request.method || "GET",
+        path: url.pathname,
+        statusCode: response.statusCode,
+        durationMs: Date.now() - startedAt
+      }));
+    });
     return gatewayHandler(request, response);
   });
 

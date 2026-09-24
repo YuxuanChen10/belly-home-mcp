@@ -24,7 +24,9 @@ final class AppModel: ObservableObject {
     }
 
     init() {
-        gatewayAddress = UserDefaults.standard.string(forKey: Keys.gatewayAddress) ?? "http://127.0.0.1:8787"
+        let migratedAddress = GatewayClient.migratedAddress(UserDefaults.standard.string(forKey: Keys.gatewayAddress))
+        gatewayAddress = migratedAddress
+        UserDefaults.standard.set(migratedAddress, forKey: Keys.gatewayAddress)
         credentials = CredentialStore.load()
         authorizationState = AlarmManager.shared.authorizationState
         configurePushEvents()
@@ -128,10 +130,7 @@ final class AppModel: ObservableObject {
     }
 
     private func client() throws -> GatewayClient {
-        guard let url = URL(string: gatewayAddress), let scheme = url.scheme, ["http", "https"].contains(scheme) else {
-            throw GatewayClientError.invalidURL
-        }
-        return GatewayClient(baseURL: url)
+        GatewayClient(baseURL: try GatewayClient.resolveBaseURL(gatewayAddress))
     }
 
     private func configurePushEvents() {

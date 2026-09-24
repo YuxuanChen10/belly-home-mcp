@@ -61,9 +61,9 @@ xcodegen generate
 open AlarmGateway.xcodeproj
 ```
 
-In Xcode, select your development team, change the bundle identifier if needed, and run on the iPhone. Enter the Mac-reachable gateway URL, create a pairing code with `npm run pairing-code`, and pair the phone. Grant AlarmKit permission, then use **Sync now** after creating an alarm through the API or MCP tool.
+In Xcode, select your development team, change the bundle identifier if needed, and run on the iPhone. The app defaults to `https://alarm.bellyjuris.com`; create a pairing code with `npm run pairing-code`, and pair the phone. Grant AlarmKit permission, then use **Sync now** after creating an alarm through the API or MCP tool.
 
-For a physical phone, the gateway URL cannot be `localhost`; use the Mac's LAN address, for example `http://192.168.1.20:8787`. Foreground synchronization is always available for deterministic local testing. When APNs credentials are configured, the gateway also sends a background wake-up after each queued change; iOS still decides when background work runs, so queued status remains truthful until the phone ACK arrives.
+For a physical phone, the gateway URL cannot be `localhost` because that points back to the phone. Use `https://alarm.bellyjuris.com`; a Mac LAN address such as `http://192.168.1.20:8787` is only a local-development fallback. Foreground synchronization is always available for deterministic testing. When APNs credentials are configured, the gateway also sends a background wake-up after each queued change; iOS still decides when background work runs, so queued status remains truthful until the phone ACK arrives.
 
 ## MCP configuration
 

@@ -26,7 +26,7 @@ struct ContentView: View {
 
     private var connectionSection: some View {
         Section("Gateway") {
-            TextField("http://192.168.1.20:8787", text: $model.gatewayAddress)
+            TextField("https://alarm.bellyjuris.com", text: $model.gatewayAddress)
                 .textInputAutocapitalization(.never)
                 .keyboardType(.URL)
                 .autocorrectionDisabled()

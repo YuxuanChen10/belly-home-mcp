@@ -1,7 +1,44 @@
 import Foundation
 
 struct GatewayClient {
+    static let productionAddress = "https://alarm.bellyjuris.com"
+
     let baseURL: URL
+
+    static func migratedAddress(_ storedAddress: String?) -> String {
+        guard let storedAddress else { return productionAddress }
+        let trimmed = storedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return productionAddress }
+
+        let candidate = trimmed.contains("://") ? trimmed : "https://\(trimmed)"
+        guard let components = URLComponents(string: candidate),
+              let host = components.host?.lowercased() else {
+            return trimmed
+        }
+        if ["127.0.0.1", "localhost", "0.0.0.0", "::1"].contains(host) {
+            return productionAddress
+        }
+        return trimmed
+    }
+
+    static func resolveBaseURL(_ address: String) throws -> URL {
+        let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        let candidate = trimmed.contains("://") ? trimmed : "https://\(trimmed)"
+        guard var components = URLComponents(string: candidate),
+              let scheme = components.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              components.host != nil,
+              components.query == nil,
+              components.fragment == nil else {
+            throw GatewayClientError.invalidURL
+        }
+
+        let path = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard path.isEmpty || path == "mcp" else { throw GatewayClientError.invalidURL }
+        components.path = ""
+        guard let url = components.url else { throw GatewayClientError.invalidURL }
+        return url
+    }
 
     func pair(code: String, name: String) async throws -> DeviceCredentials {
         try await send(
