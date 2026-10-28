@@ -7,9 +7,39 @@ import { createHash } from "node:crypto";
 
 const sourceRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const runtimeRoot = join(homedir(), "Library", "Application Support", "Belly Home Infra", "gateway");
-const sourceEnv = await readFile(join(sourceRoot, ".env"), "utf8");
-const sourcePort = sourceEnv.match(/^BELLY_HOME_PORT=(\d+)$/m)?.[1];
-if (!sourcePort) throw new Error("Development .env must define BELLY_HOME_PORT");
+const runtimeEnvFile = join(runtimeRoot, ".env");
+
+async function readOptionalFile(path) {
+  try {
+    return await readFile(path, "utf8");
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+function configuredPort(content, source) {
+  if (content === null) return null;
+  const match = /^BELLY_HOME_PORT=(.*)$/m.exec(content);
+  if (!match) return null;
+  if (!/^\d+$/.test(match[1])) throw new Error(`${source} has an invalid BELLY_HOME_PORT`);
+  const port = Number.parseInt(match[1], 10);
+  if (port < 1 || port > 65535) throw new Error(`${source} has an invalid BELLY_HOME_PORT`);
+  return match[1];
+}
+
+const [sourceEnv, runtimeEnv, exampleEnv] = await Promise.all([
+  readOptionalFile(join(sourceRoot, ".env")),
+  readOptionalFile(runtimeEnvFile),
+  readOptionalFile(join(sourceRoot, ".env.example"))
+]);
+if (runtimeEnv === null) {
+  throw new Error(`Runtime .env is missing at ${runtimeEnvFile}; run npm run launchd:install first`);
+}
+const sourcePort = configuredPort(sourceEnv, "Development .env")
+  || configuredPort(runtimeEnv, "Runtime .env")
+  || configuredPort(exampleEnv, ".env.example");
+if (!sourcePort) throw new Error("BELLY_HOME_PORT is not configured");
 
 function runProcess(command, args, stdio = "inherit") {
   return new Promise((resolve, reject) => {
@@ -100,8 +130,6 @@ if (digest(sourceHelper) !== digest(runtimeHelper)) {
 }
 await runProcess("codesign", ["--verify", "--deep", "--strict", join(runtimeRoot, helperBundle)]);
 
-const runtimeEnvFile = join(runtimeRoot, ".env");
-const runtimeEnv = await readFile(runtimeEnvFile, "utf8");
 const removedKeys = new Set([
   "PORT",
   "ALARM_GATEWAY_URL",

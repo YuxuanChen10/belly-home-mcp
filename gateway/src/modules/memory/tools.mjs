@@ -119,7 +119,7 @@ function registerDiaryTools(server, diary, auditLog) {
 function registerDocumentTools(server, documents, auditLog) {
   server.registerTool("create_document", {
     title: "Create Belly Home document",
-    description: `Create a standalone Design, Development, or Knowledge document with a stable ID. The gateway owns its storage path, timestamps, and initial version.
+    description: `Create a standalone Design, Development, or Knowledge document with a stable ID and a readable Markdown filename derived from its title. The gateway owns its storage path, timestamps, and initial version.
                  Use this tool only when creating a new standalone document.
                  Do not use it to continue an existing document.`,
     inputSchema: {
@@ -134,6 +134,7 @@ function registerDocumentTools(server, documents, auditLog) {
       id: z.string().uuid(),
       target: DOCUMENT_TARGET_SCHEMA,
       title: z.string(),
+      filename: z.string(),
       tags: z.array(z.string()),
       version: z.literal(1),
       createdAt: z.string(),
@@ -172,6 +173,8 @@ function registerDocumentTools(server, documents, auditLog) {
       status: z.enum(["created", "appended"]),
       id: z.string().uuid().optional(),
       target: DOCUMENT_TARGET_SCHEMA,
+      title: z.string().optional(),
+      filename: z.string().optional(),
       date: z.string(),
       time: z.string(),
       version: z.number().int().optional(),
@@ -192,12 +195,44 @@ function registerDocumentTools(server, documents, auditLog) {
     }
   });
 
+  server.registerTool("update_document", {
+    title: "Update Design document",
+    description: `Replace the user-authored Markdown body of an existing standalone Design document.
+                 Read it first to get its current version and rawBody. Supply only the new body as content; exclude the Gateway-generated heading, tags, and metadata.
+                 The Gateway preserves the previous revision and rejects stale expectedVersion values.`,
+    inputSchema: {
+      target: z.literal("design"),
+      title: z.string().trim().min(1).max(160).regex(/^[^\r\n]+$/, "title must be a single line"),
+      expectedVersion: z.number().int().min(1),
+      content: z.string().min(1).max(documents.maxContentLength).refine((value) => value.trim().length > 0, "content is required"),
+      changeSummary: z.string().trim().min(1).max(500).optional()
+    },
+    outputSchema: {
+      status: z.literal("updated"), id: z.string().uuid(), target: z.literal("design"),
+      title: z.string(), tags: z.array(z.string()), version: z.number().int(),
+      filename: z.string(),
+      createdAt: z.string(), updatedAt: z.string(), size: z.number()
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false }
+  }, async ({ target, title, expectedVersion, content, changeSummary }) => {
+    const startedAt = new Date();
+    try {
+      const { path: _path, ...result } = await documents.update({ target, title, expectedVersion, content, changeSummary });
+      await writeContentAudit({ auditLog, tool: "update_document", startedAt, status: result.status, contentChars: content.length, target, operation: "UPDATE" });
+      return toolResult(result);
+    } catch (error) {
+      await writeContentAudit({ auditLog, tool: "update_document", startedAt, status: "error", contentChars: typeof content === "string" ? content.length : 0, target, operation: "UPDATE" });
+      return toolFailure(error);
+    }
+  });
+
   server.registerTool("read_document", {
     title: "Read Belly Home document",
     description: `Read a Belly Home document without modifying it.
                  Use this tool when you need to understand existing long-term information before reasoning, continuing previous work, or making updates.
                  Do not use this tool to discover which documents exist or to modify document contents.
                  If \`title\` is omitted, read the collection's aggregate document. If \`title\` is provided, read the standalone document with that title within the collection.
+                 Design standalone reads also return rawBody, the user-authored Markdown without the Gateway-generated heading and tags. The existing content field remains unchanged.
                  The Gateway resolves document routing, pagination, storage, metadata, and version retrieval.
                  Callers provide the document collection, optional document title, and optional pagination parameters.`,
     inputSchema: {
@@ -211,10 +246,12 @@ function registerDocumentTools(server, documents, auditLog) {
       id: z.string().uuid().optional(),
       target: DOCUMENT_TARGET_SCHEMA,
       title: z.string().optional(),
+      filename: z.string().optional(),
       tags: z.array(z.string()).optional(),
       version: z.number().int().optional(),
       createdAt: z.string().optional(),
       content: z.string(),
+      rawBody: z.string().optional(),
       offset: z.number().int(),
       limit: z.number().int().optional(),
       returnedCharacters: z.number().int(),

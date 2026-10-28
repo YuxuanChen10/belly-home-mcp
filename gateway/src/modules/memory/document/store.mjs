@@ -1,14 +1,14 @@
 import { constants as fsConstants } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
-import { access, mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { access, link, mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { z } from "zod";
 
 const TARGETS = Object.freeze({
   design: { directory: "Design", file: "Design Diary.md", title: "Design Diary" },
   development: { directory: "Development", file: "Development Log.md", title: "Development Log" },
-  knowledge: { directory: "Knowledge", file: "Lessons Learned.md", title: "Lessons Learned" }
+  knowledge: { directory: "Knowledge", file: "bugbooklet.md", title: "bugbooklet" }
 });
 
 export const DOCUMENT_TARGETS = Object.freeze(Object.keys(TARGETS));
@@ -110,10 +110,16 @@ function encodeMetadata(metadata) {
   return Buffer.from(JSON.stringify(metadata), "utf8").toString("base64url");
 }
 
-function decodeMetadata(document) {
+function decodeMetadataIfPresent(document) {
   const match = /^<!-- belly-home:document-data:([A-Za-z0-9_-]+) -->/.exec(document);
-  if (!match) throw new Error("document metadata is missing");
+  if (!match) return null;
   return JSON.parse(Buffer.from(match[1], "base64url").toString("utf8"));
+}
+
+function decodeMetadata(document) {
+  const metadata = decodeMetadataIfPresent(document);
+  if (!metadata) throw new Error("document metadata is missing");
+  return metadata;
 }
 
 function replaceMetadata(document, metadata) {
@@ -127,8 +133,114 @@ function readableDocument(document) {
   return document.replace(/^<!-- belly-home:document-data:[A-Za-z0-9_-]+ -->\n?/, "");
 }
 
+function authoredBody(document, metadata) {
+  const readable = readableDocument(document);
+  const heading = `# ${metadata.title}\n`;
+  const tags = metadata.tags.length > 0
+    ? `\nTags: ${metadata.tags.map((tag) => `#${tag}`).join(" ")}\n\n`
+    : "";
+  const prefix = heading + tags;
+  if (!readable.startsWith(prefix)) throw new Error("document serialization is invalid");
+  return readable.slice(prefix.length);
+}
+
+function validateStandalone(metadata, filePath) {
+  if (!metadata || metadata.target !== "design" || !Number.isSafeInteger(metadata.version)
+    || metadata.version < 1 || (metadata.filename || `${metadata.id}.md`) !== basename(filePath)
+    || typeof metadata.title !== "string" || typeof metadata.createdAt !== "string"
+    || typeof metadata.updatedAt !== "string" || !Array.isArray(metadata.tags)) {
+    throw new Error("document metadata is invalid");
+  }
+}
+
+async function durableWrite(path, content) {
+  const handle = await open(path, "wx", 0o600);
+  try {
+    await handle.writeFile(content, "utf8");
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
+async function syncDirectory(path) {
+  const handle = await open(path, "r");
+  try { await handle.sync(); } finally { await handle.close(); }
+}
+
+async function durableCreate(path, content) {
+  const temporaryPath = `${path}.${randomUUID()}.tmp`;
+  try {
+    await durableWrite(temporaryPath, content);
+    await link(temporaryPath, path);
+    await syncDirectory(dirname(path));
+  } finally {
+    await rm(temporaryPath, { force: true });
+  }
+}
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function withDocumentLock(filePath, operation) {
+  const lockPath = `${filePath}.lock`;
+  const deadline = Date.now() + 15_000;
+  for (;;) {
+    try {
+      await mkdir(lockPath);
+      break;
+    } catch (error) {
+      if (error?.code !== "EEXIST") throw error;
+      let owner;
+      try { owner = JSON.parse(await readFile(join(lockPath, "owner.json"), "utf8")); } catch {}
+      let alive = false;
+      if (Number.isInteger(owner?.pid)) {
+        try { process.kill(owner.pid, 0); alive = true; } catch (error) { alive = error?.code === "EPERM"; }
+      }
+      let age;
+      try { age = Date.now() - (await stat(lockPath)).mtimeMs; }
+      catch (error) { if (error?.code === "ENOENT") continue; throw error; }
+      if (!alive && age > (owner ? 1_000 : 5_000)) {
+        await rm(lockPath, { recursive: true, force: true });
+        continue;
+      }
+      if (Date.now() >= deadline) throw new Error("document lock timed out");
+      await delay(25);
+    }
+  }
+  try {
+    await durableWrite(join(lockPath, "owner.json"), JSON.stringify({ pid: process.pid }));
+    return await operation();
+  } finally {
+    await rm(lockPath, { recursive: true, force: true });
+  }
+}
+
 function titleKey(title) {
   return title.normalize("NFKC").toLocaleLowerCase("en-US");
+}
+
+function filenameKey(filename) {
+  return filename.normalize("NFKC").toLocaleLowerCase("en-US");
+}
+
+function filenameStem(title) {
+  let stem = title.normalize("NFC").replace(/\.md$/i, "")
+    .replace(/[^\p{L}\p{N}\p{M}._-]+/gu, "-")
+    .replace(/-+/g, "-")
+    .replace(/^[._-]+|[._-]+$/g, "");
+  if (!stem) stem = "Document";
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(stem)) stem = `Document-${stem}`;
+  while (Buffer.byteLength(stem, "utf8") > 180) stem = Array.from(stem).slice(0, -1).join("");
+  return stem.replace(/[._-]+$/g, "") || "Document";
+}
+
+function managedMetadata(document, target) {
+  let metadata;
+  try { metadata = decodeMetadataIfPresent(document); } catch { return null; }
+  if (!metadata || metadata.target !== target || !/^[0-9a-f-]{36}$/i.test(metadata.id)
+    || typeof metadata.title !== "string" || !Number.isSafeInteger(metadata.version)
+    || metadata.version < 1) return null;
+  return metadata;
 }
 
 function createdDocument(metadata, content, attachments) {
@@ -189,6 +301,31 @@ export class DocumentStore {
     return join(this.documentsDirectory(target), `${id}.md`);
   }
 
+  documentPath(target, filename) {
+    if (typeof filename !== "string" || basename(filename) !== filename || !filename.endsWith(".md")) {
+      throw new Error("document filename is invalid");
+    }
+    return join(this.documentsDirectory(target), filename);
+  }
+
+  revisionPath(id, version) {
+    if (!/^[0-9a-f-]{36}$/.test(id) || !Number.isSafeInteger(version) || version < 1) {
+      throw new Error("invalid revision reference");
+    }
+    return join(this.documentsDirectory("design"), ".revisions", id, `${version}.json`);
+  }
+
+  async readRevision(id, version) {
+    const revision = JSON.parse(await readFile(this.revisionPath(id, version), "utf8"));
+    if (revision.format !== 1 || revision.metadata?.id !== id || revision.metadata.version !== version
+      || revision.metadata.target !== "design" || typeof revision.body !== "string"
+      || typeof revision.serializedDocument !== "string"
+      || authoredBody(revision.serializedDocument, revision.metadata) !== revision.body) {
+      throw new Error("stored revision is invalid");
+    }
+    return revision;
+  }
+
   titleClaimPath(target, title) {
     const digest = createHash("sha256").update(titleKey(title)).digest("hex");
     return join(this.documentsDirectory(target), ".titles", `${digest}.json`);
@@ -209,11 +346,18 @@ export class DocumentStore {
     const normalizedTitle = normalizeTitle(title);
     const claimPath = this.titleClaimPath(target, normalizedTitle);
     if (await pathExists(claimPath)) {
-      const claim = JSON.parse(await readFile(claimPath, "utf8"));
-      const filePath = this.createdDocumentPath(target, claim.id);
-      if (!(await pathExists(filePath))) throw new Error("document title index is invalid");
-      const document = await readFile(filePath, "utf8");
-      return { filePath, document, metadata: decodeMetadata(document) };
+      let claim;
+      try { claim = JSON.parse(await readFile(claimPath, "utf8")); } catch {}
+      if (/^[0-9a-f-]{36}$/i.test(claim?.id) && (!claim.filename || (basename(claim.filename) === claim.filename && claim.filename.endsWith(".md")))) {
+        const filePath = this.documentPath(target, claim.filename || `${claim.id}.md`);
+        if (await pathExists(filePath)) {
+          const document = await readFile(filePath, "utf8");
+          const metadata = managedMetadata(document, target);
+          if (metadata?.id === claim.id && titleKey(metadata.title) === titleKey(normalizedTitle)) {
+            return { filePath, document, metadata };
+          }
+        }
+      }
     }
 
     let entries;
@@ -223,11 +367,12 @@ export class DocumentStore {
       if (error?.code === "ENOENT") return null;
       throw error;
     }
-    for (const entry of entries) {
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
       if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
       const filePath = join(this.documentsDirectory(target), entry.name);
       const document = await readFile(filePath, "utf8");
-      const metadata = decodeMetadata(document);
+      const metadata = managedMetadata(document, target);
+      if (!metadata) continue;
       if (titleKey(metadata.title) === titleKey(normalizedTitle)) {
         return { filePath, document, metadata };
       }
@@ -245,7 +390,7 @@ export class DocumentStore {
     const normalizedAttachments = normalizeAttachments(attachments, this.maxAttachments);
     const id = randomUUID();
     const timestamp = this.now().toISOString();
-    const metadata = {
+    const baseMetadata = {
       id,
       target,
       title: normalizedTitle,
@@ -254,50 +399,106 @@ export class DocumentStore {
       createdAt: timestamp,
       updatedAt: timestamp
     };
-    const filePath = this.createdDocumentPath(target, id);
     const claimPath = this.titleClaimPath(target, normalizedTitle);
     await mkdir(dirname(claimPath), { recursive: true });
-
-    if (await this.findStandaloneDocument(target, normalizedTitle)) {
-      throw new Error("a document with this title already exists in the target");
-    }
-
-    let claimHandle;
-    try {
-      claimHandle = await open(claimPath, "wx", 0o600);
-    } catch (error) {
-      if (error?.code === "EEXIST") throw new Error("a document with this title already exists in the target");
-      throw error;
-    }
-
-    try {
-      await claimHandle.writeFile(`${JSON.stringify({ id, title: normalizedTitle })}\n`, "utf8");
-      await claimHandle.sync();
-      await claimHandle.close();
-      claimHandle = null;
-
-      const handle = await open(filePath, "wx", 0o600);
-      try {
-        await handle.writeFile(createdDocument(metadata, normalizedContent, normalizedAttachments), "utf8");
-        await handle.sync();
-      } finally {
-        await handle.close();
+    const directory = this.documentsDirectory(target);
+    return withDocumentLock(join(directory, ".filename-allocation"), async () => {
+      if (await this.findStandaloneDocument(target, normalizedTitle) || await pathExists(claimPath)) {
+        throw new Error("a document with this title already exists in the target");
       }
-    } catch (error) {
-      if (claimHandle) await claimHandle.close();
-      await rm(claimPath, { force: true });
-      await rm(filePath, { force: true });
-      throw error;
-    }
+      const used = new Set((await readdir(directory)).map(filenameKey));
+      const stem = filenameStem(normalizedTitle);
+      for (let suffix = 1; ; suffix += 1) {
+        const filename = `${stem}${suffix === 1 ? "" : `--${suffix}`}.md`;
+        if (used.has(filenameKey(filename))) continue;
+        const filePath = this.documentPath(target, filename);
+        const metadata = { ...baseMetadata, filename };
+        try {
+          await durableWrite(filePath, createdDocument(metadata, normalizedContent, normalizedAttachments));
+        } catch (error) {
+          if (error?.code === "EEXIST") { used.add(filenameKey(filename)); continue; }
+          await rm(filePath, { force: true });
+          throw error;
+        }
+        let claimCreated = false;
+        try {
+          await durableCreate(claimPath, `${JSON.stringify({ id, title: normalizedTitle, filename })}\n`);
+          claimCreated = true;
+          await syncDirectory(directory);
+        } catch (error) {
+          await rm(filePath, { force: true });
+          if (claimCreated) await rm(claimPath, { force: true });
+          throw error;
+        }
+        const file = await stat(filePath);
+        return {
+          status: "created",
+          ...metadata,
+          attachmentCount: normalizedAttachments.length,
+          path: filePath,
+          size: file.size
+        };
+      }
+    });
+  }
 
-    const file = await stat(filePath);
-    return {
-      status: "created",
-      ...metadata,
-      attachmentCount: normalizedAttachments.length,
-      path: filePath,
-      size: file.size
-    };
+  async update({ target, title, expectedVersion, content, changeSummary } = {}) {
+    if (target !== "design") throw new Error("target must be design");
+    const normalizedTitle = normalizeTitle(title);
+    const normalizedContent = normalizeContent(content, this.maxContentLength);
+    if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
+      throw new Error("expectedVersion must be a positive integer");
+    }
+    if (changeSummary !== undefined && (typeof changeSummary !== "string"
+      || changeSummary.trim().length === 0 || changeSummary.length > 500)) {
+      throw new Error("changeSummary must contain 1 to 500 characters");
+    }
+    const initial = await this.findStandaloneDocument("design", normalizedTitle);
+    if (!initial) throw new Error("Document Not Found");
+    return withDocumentLock(initial.filePath, async () => {
+      const found = await this.findStandaloneDocument("design", normalizedTitle);
+      if (!found || found.filePath !== initial.filePath) throw new Error("Document Not Found");
+      validateStandalone(found.metadata, found.filePath);
+      if (found.metadata.version !== expectedVersion) {
+        throw new Error(`VERSION_CONFLICT: current version is ${found.metadata.version}`);
+      }
+      const body = authoredBody(found.document, found.metadata);
+      const revision = {
+        format: 1,
+        metadata: found.metadata,
+        body,
+        serializedDocument: found.document,
+        ...(changeSummary === undefined ? {} : { changeSummary: changeSummary.trim() })
+      };
+      const revisionPath = this.revisionPath(found.metadata.id, found.metadata.version);
+      await mkdir(dirname(revisionPath), { recursive: true });
+      try {
+        await durableCreate(revisionPath, `${JSON.stringify(revision)}\n`);
+      } catch (error) {
+        if (error?.code !== "EEXIST") throw error;
+        const saved = await this.readRevision(found.metadata.id, found.metadata.version);
+        if (saved.serializedDocument !== found.document) {
+          throw new Error("stored revision conflicts with current document");
+        }
+      }
+      const metadata = {
+        ...found.metadata,
+        version: found.metadata.version + 1,
+        updatedAt: new Date(Math.max(this.now().getTime(), Date.parse(found.metadata.updatedAt) + 1)).toISOString()
+      };
+      const nextDocument = createdDocument(metadata, normalizedContent, []);
+      const temporaryPath = `${found.filePath}.${randomUUID()}.tmp`;
+      try {
+        await durableWrite(temporaryPath, nextDocument);
+        await rename(temporaryPath, found.filePath);
+        await syncDirectory(dirname(found.filePath));
+      } catch (error) {
+        await rm(temporaryPath, { force: true });
+        throw error;
+      }
+      const file = await stat(found.filePath);
+      return { status: "updated", ...metadata, filename: basename(found.filePath), path: found.filePath, size: file.size };
+    });
   }
 
   async append({ target, title, content, attachments } = {}) {
@@ -310,8 +511,11 @@ export class DocumentStore {
       const normalizedTitle = normalizeTitle(title);
       const writeKey = `${target}:${titleKey(normalizedTitle)}`;
       return this.serializeStandaloneWrite(writeKey, async () => {
+        const initial = await this.findStandaloneDocument(target, normalizedTitle);
+        if (!initial) throw new Error("Document Not Found");
+        const operation = async () => {
         const found = await this.findStandaloneDocument(target, normalizedTitle);
-        if (!found) throw new Error("Document Not Found");
+        if (!found || found.filePath !== initial.filePath) throw new Error("Document Not Found");
         const currentTime = this.now();
         const { date, time } = localParts(currentTime, this.timeZone);
         const metadata = {
@@ -321,10 +525,11 @@ export class DocumentStore {
         };
         const entry = `\n## ${date} ${time}\n\n${normalizedContent}${attachmentBlock(normalizedAttachments)}\n`;
         const nextDocument = `${replaceMetadata(found.document, metadata).trimEnd()}\n${entry}`;
-        const temporaryPath = `${found.filePath}.tmp`;
+        const temporaryPath = `${found.filePath}.${randomUUID()}.tmp`;
         try {
-          await writeFile(temporaryPath, nextDocument, { encoding: "utf8", mode: 0o600 });
+          await durableWrite(temporaryPath, nextDocument);
           await rename(temporaryPath, found.filePath);
+          if (target === "design") await syncDirectory(dirname(found.filePath));
         } catch (error) {
           await rm(temporaryPath, { force: true });
           throw error;
@@ -335,6 +540,7 @@ export class DocumentStore {
           id: metadata.id,
           target,
           title: metadata.title,
+          filename: basename(found.filePath),
           date,
           time,
           version: metadata.version,
@@ -343,6 +549,8 @@ export class DocumentStore {
           path: found.filePath,
           size: file.size
         };
+        };
+        return target === "design" ? withDocumentLock(initial.filePath, operation) : operation();
       });
     }
 
@@ -415,9 +623,14 @@ export class DocumentStore {
       ...(standalone ? {
         id: standalone.metadata.id,
         title: standalone.metadata.title,
+        filename: basename(standalone.filePath),
         tags: standalone.metadata.tags,
         version: standalone.metadata.version,
-        createdAt: standalone.metadata.createdAt
+        createdAt: standalone.metadata.createdAt,
+        ...(target === "design" ? (() => {
+          try { return { rawBody: authoredBody(storedContent, standalone.metadata) }; }
+          catch { return {}; }
+        })() : {})
       } : {}),
       content,
       offset: page.offset,

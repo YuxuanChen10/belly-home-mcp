@@ -76,6 +76,7 @@ function assertMinimalTools(tools) {
     "list_diary_entries",
     "create_document",
     "append_document",
+    "update_document",
     "read_document",
     "read_file_names",
     "move_files"
@@ -99,6 +100,9 @@ function assertMinimalTools(tools) {
   assert.deepEqual(Object.keys(documentTool.inputSchema.properties).sort(), ["attachments", "content", "target", "title"]);
   assert.deepEqual(documentTool.inputSchema.properties.target.enum, ["design", "development", "knowledge"]);
   const readDocumentTool = tools.tools.find((tool) => tool.name === "read_document");
+  const updateDocumentTool = tools.tools.find((tool) => tool.name === "update_document");
+  assert.deepEqual(Object.keys(updateDocumentTool.inputSchema.properties).sort(), ["changeSummary", "content", "expectedVersion", "target", "title"]);
+  assert.deepEqual(updateDocumentTool.inputSchema.properties.target.const, "design");
   assert.deepEqual(Object.keys(readDocumentTool.inputSchema.properties).sort(), ["limit", "offset", "target", "title"]);
   assert.deepEqual(readDocumentTool.inputSchema.properties.target.enum, ["design", "development", "knowledge"]);
   assert.equal(readDocumentTool.annotations.readOnlyHint, true);
@@ -206,9 +210,10 @@ test("create-only stdio MCP exposes alarm, memory, and Desktop tools", async () 
     assert.equal(createdDocument.isError, undefined);
     assert.equal(createdDocument.structuredContent.status, "created");
     assert.equal(createdDocument.structuredContent.version, 1);
+    assert.equal(createdDocument.structuredContent.filename, "Standalone-MCP-document.md");
     assert.equal(createdDocument.structuredContent.createdAt, createdDocument.structuredContent.updatedAt);
     assert.match(
-      await readFile(join(documentRootDirectory, "Development", "Documents", `${createdDocument.structuredContent.id}.md`), "utf8"),
+      await readFile(join(documentRootDirectory, "Development", "Documents", createdDocument.structuredContent.filename), "utf8"),
       /first document version/
     );
 
@@ -233,6 +238,22 @@ test("create-only stdio MCP exposes alarm, memory, and Desktop tools", async () 
     assert.equal(readStandalone.structuredContent.version, 2);
     assert.match(readStandalone.structuredContent.content, /first document version/);
     assert.match(readStandalone.structuredContent.content, /second document version/);
+
+    const designCreated = await client.callTool({
+      name: "create_document",
+      arguments: { target: "design", title: "Design Update Test", content: "Original body" }
+    });
+    const designUpdated = await client.callTool({
+      name: "update_document",
+      arguments: { target: "design", title: "Design Update Test", expectedVersion: 1, content: "Replacement body" }
+    });
+    assert.equal(designUpdated.structuredContent.id, designCreated.structuredContent.id);
+    assert.equal(designUpdated.structuredContent.version, 2);
+    const designRead = await client.callTool({
+      name: "read_document",
+      arguments: { target: "design", title: "Design Update Test" }
+    });
+    assert.equal(designRead.structuredContent.rawBody, "Replacement body");
 
     const document = await client.callTool({
       name: "append_document",
@@ -292,6 +313,9 @@ test("create-only stdio MCP exposes alarm, memory, and Desktop tools", async () 
       "create_document",
       "append_document",
       "read_document",
+      "create_document",
+      "update_document",
+      "read_document",
       "append_document",
       "read_document"
     ]);
@@ -304,6 +328,9 @@ test("create-only stdio MCP exposes alarm, memory, and Desktop tools", async () 
     assert.equal(events[6].target, "development");
     assert.equal(events[7].target, "design");
     assert.equal(events[8].target, "design");
+    assert.equal(events[9].target, "design");
+    assert.equal(events[10].target, "design");
+    assert.equal(events[11].target, "design");
 
     const desktopEventsText = await readFile(desktopLogFile, "utf8");
     assert.equal(desktopEventsText.includes("Resume.pdf"), false);
