@@ -6,7 +6,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    DEVELOPMENT_TEAM: 3PDA3SWWKY
+    DEVELOPMENT_TEAM: ZSVJL9K3QR
 targets:
   iPadReceiver:
     type: application
@@ -14,9 +14,7 @@ targets:
     sources:
       - path: Receiver
         excludes:
-          - Resources
-      - path: Receiver/Resources
-        type: folder
+          - Resources/test-image.png
     info:
       path: Receiver/Info.plist
       properties:

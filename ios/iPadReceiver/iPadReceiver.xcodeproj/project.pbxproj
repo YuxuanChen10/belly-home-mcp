@@ -9,16 +9,16 @@
 /* Begin PBXBuildFile section */
 		18655ABAF21F518460B3F1D5 /* PhotoLibraryWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7056E5CE021E8826F1255896 /* PhotoLibraryWriter.swift */; };
 		2B08506AF9DD2503BD327874 /* ReceiverApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1133D723876F6628A5B79616 /* ReceiverApp.swift */; };
-		43984E85E01B507DF2487854 /* Resources in Resources */ = {isa = PBXBuildFile; fileRef = 404B3DEF622823F155648C30 /* Resources */; };
+		43984E85E01B507DF2487854 /* test-image-png.data in Resources */ = {isa = PBXBuildFile; fileRef = 404B3DEF622823F155648C30 /* test-image.png */; };
 		742B16BAAC5538B41FEB7B87 /* PhotoSaveTestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0891B9512CFF442FC7489F37 /* PhotoSaveTestView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		0891B9512CFF442FC7489F37 /* PhotoSaveTestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoSaveTestView.swift; sourceTree = "<group>"; };
 		1133D723876F6628A5B79616 /* ReceiverApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiverApp.swift; sourceTree = "<group>"; };
-		404B3DEF622823F155648C30 /* Resources */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Resources; path = Receiver/Resources; sourceTree = SOURCE_ROOT; };
+		404B3DEF622823F155648C30 /* test-image-png.data */ = {isa = PBXFileReference; lastKnownFileType = file; path = "test-image-png.data"; sourceTree = "<group>"; };
 		7056E5CE021E8826F1255896 /* PhotoLibraryWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryWriter.swift; sourceTree = "<group>"; };
-		ED30C9B125C56D31613DCDC3 /* iPadReceiver.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = iPadReceiver.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		ED30C9B125C56D31613DCDC3 /* iPadReceiver.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = iPadReceiver.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FD13C5EA8AB8E7E5E6AE93AA /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -39,10 +39,17 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		406B7DEF4BC1A36900DC1A28 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				404B3DEF622823F155648C30 /* test-image.png */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
 		89CD738D4003B01F067DA5A9 = {
 			isa = PBXGroup;
 			children = (
-				404B3DEF622823F155648C30 /* Resources */,
 				F8CF23F8412DC89B28A81E7F /* Receiver */,
 				7D5BE69CDBE53E46648BD089 /* Products */,
 			);
@@ -61,6 +68,7 @@
 			children = (
 				FD13C5EA8AB8E7E5E6AE93AA /* Info.plist */,
 				1133D723876F6628A5B79616 /* ReceiverApp.swift */,
+				406B7DEF4BC1A36900DC1A28 /* Resources */,
 				F1FA47728FDBF33241F38DE2 /* Services */,
 				19D0D288CB88AF0B48E8F284 /* Views */,
 			);
@@ -98,7 +106,6 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					306ED93261E0E85B098F8288 = {
-						DevelopmentTeam = 3PDA3SWWKY;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -127,7 +134,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				43984E85E01B507DF2487854 /* Resources in Resources */,
+				43984E85E01B507DF2487854 /* test-image-png.data in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -182,7 +189,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = 3PDA3SWWKY;
+				DEVELOPMENT_TEAM = ZSVJL9K3QR;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -211,6 +218,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				COMPRESS_PNG_FILES = NO;
+				DEVELOPMENT_TEAM = ZSVJL9K3QR;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Receiver/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -231,6 +239,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				COMPRESS_PNG_FILES = NO;
+				DEVELOPMENT_TEAM = ZSVJL9K3QR;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Receiver/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -279,7 +288,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = 3PDA3SWWKY;
+				DEVELOPMENT_TEAM = ZSVJL9K3QR;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;

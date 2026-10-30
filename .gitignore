@@ -9,3 +9,4 @@ outputs/
 *.xcuserstate
 ios/*.xcodeproj/
 ios/DerivedData/
+ios/iPadReceiver/build/

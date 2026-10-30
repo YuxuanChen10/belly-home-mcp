@@ -29,12 +29,9 @@ struct PhotoLibraryWriter {
         PHPhotoLibrary.authorizationStatus(for: .addOnly)
     }
 
-    func savePNG(at fileURL: URL) async throws {
+    func savePNG(data: Data, originalFilename: String = "image.png") async throws {
         let signature = Data([137, 80, 78, 71, 13, 10, 26, 10])
-        guard fileURL.isFileURL,
-              fileURL.pathExtension.lowercased() == "png",
-              let data = try? Data(contentsOf: fileURL, options: .mappedIfSafe),
-              data.starts(with: signature) else {
+        guard data.starts(with: signature) else {
             throw PhotoLibraryWriterError.invalidPNG
         }
 
@@ -58,9 +55,8 @@ struct PhotoLibraryWriter {
             PHPhotoLibrary.shared().performChanges {
                 let request = PHAssetCreationRequest.forAsset()
                 let options = PHAssetResourceCreationOptions()
-                options.originalFilename = fileURL.lastPathComponent
-                options.shouldMoveFile = false
-                request.addResource(with: .photo, fileURL: fileURL, options: options)
+                options.originalFilename = originalFilename
+                request.addResource(with: .photo, data: data, options: options)
             } completionHandler: { success, error in
                 if success {
                     continuation.resume()

@@ -49,10 +49,11 @@ struct PhotoSaveTestView: View {
         defer { authorization = writer.authorizationStatus() }
 
         do {
-            guard let fileURL = Bundle.main.url(forResource: "test-image", withExtension: "png", subdirectory: "Resources") else {
+            guard let fileURL = Bundle.main.url(forResource: "test-image-png", withExtension: "data") else {
                 throw PhotoLibraryWriterError.invalidPNG
             }
-            try await writer.savePNG(at: fileURL)
+            let data = try Data(contentsOf: fileURL)
+            try await writer.savePNG(data: data, originalFilename: "test-image.png")
             operation = .success
         } catch {
             operation = .failed

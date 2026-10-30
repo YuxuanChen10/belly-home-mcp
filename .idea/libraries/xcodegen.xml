@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="xcodegen">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/work/xcodegen.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>
